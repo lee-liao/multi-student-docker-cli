@@ -143,15 +143,27 @@ class PortAssignmentManager:
         import glob
         import re
         
-        pattern = os.path.join(search_dir, "student-port-assignments-v*.enc")
-        files = glob.glob(pattern)
+        # Search in multiple possible locations
+        search_dirs = [
+            search_dir,  # Current directory
+            "cli-tool",  # CLI tool directory (for student distribution)
+            os.path.join(os.path.dirname(__file__), "..", ".."),  # Relative to this file
+            os.path.dirname(os.path.abspath(__file__))  # Same directory as this file
+        ]
         
-        if not files:
+        all_files = []
+        for dir_path in search_dirs:
+            if os.path.exists(dir_path):
+                pattern = os.path.join(dir_path, "student-port-assignments-v*.enc")
+                files = glob.glob(pattern)
+                all_files.extend(files)
+        
+        if not all_files:
             return None
         
         # Extract version numbers and sort
         version_files = []
-        for file_path in files:
+        for file_path in all_files:
             filename = os.path.basename(file_path)
             match = re.search(r'v(\d+)\.(\d+)', filename)
             if match:
