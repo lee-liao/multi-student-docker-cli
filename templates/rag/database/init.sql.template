@@ -1,0 +1,274 @@
+-- PostgreSQL Initialization Script for {{USERNAME}} - RAG Project
+-- Generated for project: {{PROJECT_NAME}}
+-- Template type: {{TEMPLATE_TYPE}}
+-- Created: {{CURRENT_TIMESTAMP}}
+
+-- Create extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "vector";
+
+-- Create RAG chatbot database if it doesn't exist
+SELECT 'CREATE DATABASE rag_chatbot'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'rag_chatbot')\gexec
+
+-- Connect to RAG database
+\c rag_chatbot;
+
+-- Set search path
+SET search_path TO public;
+
+-- Documents table for storing uploaded files and their content
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    filename VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100),
+    file_size BIGINT,
+    content TEXT,
+    summary TEXT,
+    metadata JSONB DEFAULT '{}',
+    embedding vector(1536), -- OpenAI embedding dimension
+    processing_status VARCHAR(20) DEFAULT 'pending' CHECK (processing_status IN ('pending', 'processing', 'completed', 'failed')),
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Document chunks for RAG retrieval
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    token_count INTEGER,
+    embedding vector(1536),
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(document_id, chunk_index)
+);
+
+-- Chat sessions for organizing conversations
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    session_name VARCHAR(255) NOT NULL,
+    system_prompt TEXT DEFAULT 'You are a helpful AI assistant that can answer questions based on the provided documents.',
+    model_name VARCHAR(100) DEFAULT 'gpt-3.5-turbo',
+    model_config JSONB DEFAULT '{"temperature": 0.7, "max_tokens": 1000}',
+    rag_config JSONB DEFAULT '{"chunk_size": 1000, "chunk_overlap": 200, "top_k": 5, "similarity_threshold": 0.7}',
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Chat messages within sessions
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    sources JSONB DEFAULT '[]', -- References to document chunks used
+    token_count INTEGER,
+    processing_time_ms INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Knowledge base collections for organizing documents
+CREATE TABLE IF NOT EXISTS knowledge_bases (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    tags TEXT[] DEFAULT '{}',
+    config JSONB DEFAULT '{}',
+    document_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Many-to-many relationship between documents and knowledge bases
+CREATE TABLE IF NOT EXISTS knowledge_base_documents (
+    knowledge_base_id UUID NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (knowledge_base_id, document_id)
+);
+
+-- RAG query logs for analytics and improvement
+CREATE TABLE IF NOT EXISTS rag_queries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID REFERENCES chat_sessions(id) ON DELETE SET NULL,
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    query_text TEXT NOT NULL,
+    query_embedding vector(1536),
+    retrieved_chunks JSONB DEFAULT '[]',
+    response_text TEXT,
+    similarity_scores FLOAT[] DEFAULT '{}',
+    processing_time_ms INTEGER,
+    model_used VARCHAR(100),
+    tokens_used INTEGER,
+    feedback_rating INTEGER CHECK (feedback_rating >= 1 AND feedback_rating <= 5),
+    feedback_comment TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_filename ON documents(filename);
+CREATE INDEX IF NOT EXISTS idx_documents_content_type ON documents(content_type);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(processing_status);
+CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
+CREATE INDEX IF NOT EXISTS idx_documents_embedding ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_status ON chat_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_created_at ON chat_sessions(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_role ON chat_messages(role);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_bases_user_id ON knowledge_bases(user_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_bases_tags ON knowledge_bases USING GIN(tags);
+
+CREATE INDEX IF NOT EXISTS idx_rag_queries_user_id ON rag_queries(user_id);
+CREATE INDEX IF NOT EXISTS idx_rag_queries_session_id ON rag_queries(session_id);
+CREATE INDEX IF NOT EXISTS idx_rag_queries_created_at ON rag_queries(created_at);
+CREATE INDEX IF NOT EXISTS idx_rag_queries_embedding ON rag_queries USING ivfflat (query_embedding vector_cosine_ops) WITH (lists = 100);
+
+-- Create functions for common operations
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Function to update document count in knowledge bases
+CREATE OR REPLACE FUNCTION update_knowledge_base_document_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE knowledge_bases 
+        SET document_count = document_count + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = NEW.knowledge_base_id;
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE knowledge_bases 
+        SET document_count = document_count - 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = OLD.knowledge_base_id;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$ language 'plpgsql';
+
+-- Function for similarity search
+CREATE OR REPLACE FUNCTION search_similar_chunks(
+    query_embedding vector(1536),
+    similarity_threshold float DEFAULT 0.7,
+    max_results int DEFAULT 5
+)
+RETURNS TABLE (
+    chunk_id UUID,
+    document_id UUID,
+    content TEXT,
+    similarity FLOAT,
+    document_filename VARCHAR(255)
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        dc.id,
+        dc.document_id,
+        dc.content,
+        1 - (dc.embedding <=> query_embedding) as similarity,
+        d.filename
+    FROM document_chunks dc
+    JOIN documents d ON dc.document_id = d.id
+    WHERE d.processing_status = 'completed'
+    AND 1 - (dc.embedding <=> query_embedding) >= similarity_threshold
+    ORDER BY dc.embedding <=> query_embedding
+    LIMIT max_results;
+END;
+$$ language 'plpgsql';
+
+-- Create triggers for updated_at columns
+CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_knowledge_bases_updated_at BEFORE UPDATE ON knowledge_bases
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create triggers for knowledge base document count
+CREATE TRIGGER update_kb_count_on_insert AFTER INSERT ON knowledge_base_documents
+    FOR EACH ROW EXECUTE FUNCTION update_knowledge_base_document_count();
+
+CREATE TRIGGER update_kb_count_on_delete AFTER DELETE ON knowledge_base_documents
+    FOR EACH ROW EXECUTE FUNCTION update_knowledge_base_document_count();
+
+-- Insert default knowledge base
+INSERT INTO knowledge_bases (name, description, tags) VALUES
+    ('Default Collection', 'Default knowledge base for uploaded documents', ARRAY['default', 'general'])
+ON CONFLICT DO NOTHING;
+
+-- Insert sample chat session
+INSERT INTO chat_sessions (session_name, system_prompt) VALUES
+    ('Welcome Chat', 'You are a helpful AI assistant for the RAG chatbot system. You can answer questions based on uploaded documents and help users understand how to use the system.')
+ON CONFLICT DO NOTHING;
+
+-- Grant permissions to application user
+GRANT USAGE ON SCHEMA public TO {{USERNAME}}_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{USERNAME}}_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {{USERNAME}}_user;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO {{USERNAME}}_user;
+
+-- Create views for easier querying
+CREATE OR REPLACE VIEW user_document_summary AS
+SELECT 
+    d.id,
+    d.filename,
+    d.content_type,
+    d.file_size,
+    d.processing_status,
+    d.created_at,
+    COUNT(dc.id) as chunk_count,
+    kb.name as knowledge_base_name
+FROM documents d
+LEFT JOIN document_chunks dc ON d.id = dc.document_id
+LEFT JOIN knowledge_base_documents kbd ON d.id = kbd.document_id
+LEFT JOIN knowledge_bases kb ON kbd.knowledge_base_id = kb.id
+WHERE d.user_id = '{{USERNAME}}'
+GROUP BY d.id, d.filename, d.content_type, d.file_size, d.processing_status, d.created_at, kb.name;
+
+CREATE OR REPLACE VIEW chat_session_summary AS
+SELECT 
+    cs.id,
+    cs.session_name,
+    cs.status,
+    cs.created_at,
+    COUNT(cm.id) as message_count,
+    MAX(cm.created_at) as last_message_at
+FROM chat_sessions cs
+LEFT JOIN chat_messages cm ON cs.id = cm.session_id
+WHERE cs.user_id = '{{USERNAME}}'
+GROUP BY cs.id, cs.session_name, cs.status, cs.created_at;
+
+-- Display initialization summary
+SELECT 
+    'RAG PostgreSQL initialization completed for user {{USERNAME}}' as message,
+    '{{PROJECT_NAME}}' as project_name,
+    'rag_chatbot' as database_name,
+    CURRENT_TIMESTAMP as initialized_at;

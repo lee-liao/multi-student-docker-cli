@@ -1,0 +1,436 @@
+// MongoDB Initialization Script for {{USERNAME}} - Common Infrastructure
+// Generated for project: {{PROJECT_NAME}}
+// Template type: {{TEMPLATE_TYPE}}
+// Created: {{CURRENT_TIMESTAMP}}
+
+// Switch to shared database
+db = db.getSiblingDB('shared_db');
+
+// Create collections with validation schemas
+db.createCollection('service_registry', {
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['service_name', 'service_type'],
+            properties: {
+                service_name: {
+                    bsonType: 'string',
+                    description: 'Service name must be a string and is required'
+                },
+                service_type: {
+                    bsonType: 'string',
+                    enum: ['database', 'cache', 'vector_db', 'api', 'worker'],
+                    description: 'Service type must be one of the enum values'
+                },
+                endpoint_url: {
+                    bsonType: 'string',
+                    description: 'Endpoint URL must be a string'
+                },
+                health_check_url: {
+                    bsonType: 'string',
+                    description: 'Health check URL must be a string'
+                },
+                status: {
+                    bsonType: 'string',
+                    enum: ['active', 'inactive', 'maintenance'],
+                    description: 'Status must be one of the enum values'
+                },
+                metadata: {
+                    bsonType: 'object',
+                    description: 'Metadata must be an object'
+                },
+                created_at: {
+                    bsonType: 'date',
+                    description: 'Created timestamp must be a date'
+                },
+                updated_at: {
+                    bsonType: 'date',
+                    description: 'Updated timestamp must be a date'
+                }
+            }
+        }
+    }
+});
+
+// RAG Projects Collections
+db.createCollection('rag_documents', {
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['user_id', 'filename', 'content'],
+            properties: {
+                user_id: {
+                    bsonType: 'string',
+                    description: 'User ID must be a string and is required'
+                },
+                filename: {
+                    bsonType: 'string',
+                    description: 'Filename must be a string and is required'
+                },
+                content: {
+                    bsonType: 'string',
+                    description: 'Content must be a string and is required'
+                },
+                content_type: {
+                    bsonType: 'string',
+                    description: 'Content type must be a string'
+                },
+                file_size: {
+                    bsonType: 'long',
+                    minimum: 0,
+                    description: 'File size must be a positive number'
+                },
+                chunks: {
+                    bsonType: 'array',
+                    items: {
+                        bsonType: 'object',
+                        properties: {
+                            text: { bsonType: 'string' },
+                            embedding: { bsonType: 'array' },
+                            metadata: { bsonType: 'object' }
+                        }
+                    },
+                    description: 'Chunks must be an array of objects'
+                },
+                metadata: {
+                    bsonType: 'object',
+                    description: 'Metadata must be an object'
+                },
+                created_at: {
+                    bsonType: 'date',
+                    description: 'Created timestamp must be a date'
+                },
+                updated_at: {
+                    bsonType: 'date',
+                    description: 'Updated timestamp must be a date'
+                }
+            }
+        }
+    }
+});
+
+db.createCollection('rag_chat_sessions', {
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['user_id', 'session_name'],
+            properties: {
+                user_id: {
+                    bsonType: 'string',
+                    description: 'User ID must be a string and is required'
+                },
+                session_name: {
+                    bsonType: 'string',
+                    description: 'Session name must be a string and is required'
+                },
+                system_prompt: {
+                    bsonType: 'string',
+                    description: 'System prompt must be a string'
+                },
+                model_config: {
+                    bsonType: 'object',
+                    description: 'Model config must be an object'
+                },
+                messages: {
+                    bsonType: 'array',
+                    items: {
+                        bsonType: 'object',
+                        required: ['role', 'content'],
+                        properties: {
+                            role: {
+                                bsonType: 'string',
+                                enum: ['user', 'assistant', 'system']
+                            },
+                            content: { bsonType: 'string' },
+                            metadata: { bsonType: 'object' },
+                            timestamp: { bsonType: 'date' }
+                        }
+                    },
+                    description: 'Messages must be an array of message objects'
+                },
+                created_at: {
+                    bsonType: 'date',
+                    description: 'Created timestamp must be a date'
+                },
+                updated_at: {
+                    bsonType: 'date',
+                    description: 'Updated timestamp must be a date'
+                }
+            }
+        }
+    }
+});
+
+// Agent Projects Collections
+db.createCollection('agent_definitions', {
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['user_id', 'agent_name', 'agent_type'],
+            properties: {
+                user_id: {
+                    bsonType: 'string',
+                    description: 'User ID must be a string and is required'
+                },
+                agent_name: {
+                    bsonType: 'string',
+                    description: 'Agent name must be a string and is required'
+                },
+                agent_type: {
+                    bsonType: 'string',
+                    enum: ['conversational', 'task_executor', 'data_processor', 'custom'],
+                    description: 'Agent type must be one of the enum values'
+                },
+                system_prompt: {
+                    bsonType: 'string',
+                    description: 'System prompt must be a string'
+                },
+                tools: {
+                    bsonType: 'array',
+                    items: {
+                        bsonType: 'object',
+                        properties: {
+                            name: { bsonType: 'string' },
+                            description: { bsonType: 'string' },
+                            parameters: { bsonType: 'object' }
+                        }
+                    },
+                    description: 'Tools must be an array of tool objects'
+                },
+                config: {
+                    bsonType: 'object',
+                    description: 'Config must be an object'
+                },
+                status: {
+                    bsonType: 'string',
+                    enum: ['active', 'inactive', 'training'],
+                    description: 'Status must be one of the enum values'
+                },
+                created_at: {
+                    bsonType: 'date',
+                    description: 'Created timestamp must be a date'
+                },
+                updated_at: {
+                    bsonType: 'date',
+                    description: 'Updated timestamp must be a date'
+                }
+            }
+        }
+    }
+});
+
+db.createCollection('agent_executions', {
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['agent_id', 'execution_id', 'status'],
+            properties: {
+                agent_id: {
+                    bsonType: 'objectId',
+                    description: 'Agent ID must be an ObjectId and is required'
+                },
+                execution_id: {
+                    bsonType: 'string',
+                    description: 'Execution ID must be a string and is required'
+                },
+                status: {
+                    bsonType: 'string',
+                    enum: ['running', 'completed', 'failed', 'cancelled'],
+                    description: 'Status must be one of the enum values'
+                },
+                input_data: {
+                    bsonType: 'object',
+                    description: 'Input data must be an object'
+                },
+                output_data: {
+                    bsonType: 'object',
+                    description: 'Output data must be an object'
+                },
+                error_message: {
+                    bsonType: 'string',
+                    description: 'Error message must be a string'
+                },
+                execution_steps: {
+                    bsonType: 'array',
+                    items: {
+                        bsonType: 'object',
+                        properties: {
+                            step_name: { bsonType: 'string' },
+                            input: { bsonType: 'object' },
+                            output: { bsonType: 'object' },
+                            duration_ms: { bsonType: 'long' },
+                            timestamp: { bsonType: 'date' }
+                        }
+                    },
+                    description: 'Execution steps must be an array of step objects'
+                },
+                execution_time_ms: {
+                    bsonType: 'long',
+                    minimum: 0,
+                    description: 'Execution time must be a positive number'
+                },
+                created_at: {
+                    bsonType: 'date',
+                    description: 'Created timestamp must be a date'
+                },
+                completed_at: {
+                    bsonType: 'date',
+                    description: 'Completed timestamp must be a date'
+                }
+            }
+        }
+    }
+});
+
+db.createCollection('agent_memory', {
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['agent_id', 'memory_type', 'memory_key', 'memory_value'],
+            properties: {
+                agent_id: {
+                    bsonType: 'objectId',
+                    description: 'Agent ID must be an ObjectId and is required'
+                },
+                memory_type: {
+                    bsonType: 'string',
+                    enum: ['short_term', 'long_term', 'episodic', 'semantic'],
+                    description: 'Memory type must be one of the enum values'
+                },
+                memory_key: {
+                    bsonType: 'string',
+                    description: 'Memory key must be a string and is required'
+                },
+                memory_value: {
+                    bsonType: 'object',
+                    description: 'Memory value must be an object and is required'
+                },
+                embedding: {
+                    bsonType: 'array',
+                    items: { bsonType: 'double' },
+                    description: 'Embedding must be an array of numbers'
+                },
+                expires_at: {
+                    bsonType: 'date',
+                    description: 'Expiration timestamp must be a date'
+                },
+                created_at: {
+                    bsonType: 'date',
+                    description: 'Created timestamp must be a date'
+                }
+            }
+        }
+    }
+});
+
+// Create indexes for performance
+db.service_registry.createIndex({ 'service_name': 1 }, { unique: true });
+db.service_registry.createIndex({ 'service_type': 1 });
+db.service_registry.createIndex({ 'status': 1 });
+
+db.rag_documents.createIndex({ 'user_id': 1 });
+db.rag_documents.createIndex({ 'filename': 1 });
+db.rag_documents.createIndex({ 'content_type': 1 });
+db.rag_documents.createIndex({ 'created_at': -1 });
+
+db.rag_chat_sessions.createIndex({ 'user_id': 1 });
+db.rag_chat_sessions.createIndex({ 'session_name': 1 });
+db.rag_chat_sessions.createIndex({ 'created_at': -1 });
+
+db.agent_definitions.createIndex({ 'user_id': 1 });
+db.agent_definitions.createIndex({ 'agent_name': 1 });
+db.agent_definitions.createIndex({ 'agent_type': 1 });
+db.agent_definitions.createIndex({ 'status': 1 });
+
+db.agent_executions.createIndex({ 'agent_id': 1 });
+db.agent_executions.createIndex({ 'execution_id': 1 }, { unique: true });
+db.agent_executions.createIndex({ 'status': 1 });
+db.agent_executions.createIndex({ 'created_at': -1 });
+
+db.agent_memory.createIndex({ 'agent_id': 1, 'memory_type': 1, 'memory_key': 1 }, { unique: true });
+db.agent_memory.createIndex({ 'memory_type': 1 });
+db.agent_memory.createIndex({ 'expires_at': 1 });
+
+// Insert initial service registry data
+db.service_registry.insertMany([
+    {
+        service_name: 'mongodb',
+        service_type: 'database',
+        endpoint_url: 'mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@{{USERNAME}}-mongodb:27017/shared_db',
+        health_check_url: null,
+        status: 'active',
+        metadata: {
+            version: '6.0',
+            features: ['transactions', 'change_streams', 'aggregation']
+        },
+        created_at: new Date(),
+        updated_at: new Date()
+    },
+    {
+        service_name: 'redis',
+        service_type: 'cache',
+        endpoint_url: 'redis://{{USERNAME}}_redis_2024@{{USERNAME}}-redis:6379/0',
+        health_check_url: null,
+        status: 'active',
+        metadata: {
+            version: '7.0',
+            features: ['persistence', 'pub_sub', 'streams']
+        },
+        created_at: new Date(),
+        updated_at: new Date()
+    },
+    {
+        service_name: 'chromadb',
+        service_type: 'vector_db',
+        endpoint_url: 'http://{{USERNAME}}-chromadb:8000',
+        health_check_url: 'http://{{USERNAME}}-chromadb:8000/api/v2/heartbeat',
+        status: 'active',
+        metadata: {
+            version: 'latest',
+            features: ['vector_search', 'collections', 'metadata_filtering']
+        },
+        created_at: new Date(),
+        updated_at: new Date()
+    }
+]);
+
+// Create user for application access
+db.createUser({
+    user: '{{USERNAME}}_app',
+    pwd: '{{USERNAME}}_password_2024',
+    roles: [
+        { role: 'readWrite', db: 'shared_db' }
+    ]
+});
+
+// Log initialization completion
+db.audit_logs.insertOne({
+    user_id: '{{USERNAME}}',
+    action: 'database_initialized',
+    resource_type: 'mongodb',
+    resource_id: 'shared_db',
+    details: {
+        template_type: '{{TEMPLATE_TYPE}}',
+        project_name: '{{PROJECT_NAME}}',
+        collections_created: [
+            'service_registry',
+            'rag_documents',
+            'rag_chat_sessions',
+            'agent_definitions',
+            'agent_executions',
+            'agent_memory'
+        ]
+    },
+    ip_address: null,
+    user_agent: 'mongodb_init_script',
+    created_at: new Date()
+});
+
+// Display initialization summary
+print('MongoDB initialization completed for user {{USERNAME}}');
+print('Project: {{PROJECT_NAME}}');
+print('Template: {{TEMPLATE_TYPE}}');
+print('Database: shared_db');
+print('Collections created: 6');
+print('Indexes created: 15');
+print('Initialized at: ' + new Date());

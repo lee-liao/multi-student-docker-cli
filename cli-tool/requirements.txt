@@ -1,0 +1,5 @@
+# CLI Tool Requirements
+# Install with: pip install -r requirements.txt
+
+cryptography>=41.0.0
+pyyaml>=6.0

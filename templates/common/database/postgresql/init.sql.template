@@ -1,0 +1,210 @@
+-- PostgreSQL Initialization Script for {{USERNAME}} - Common Infrastructure
+-- Generated for project: {{PROJECT_NAME}}
+-- Template type: {{TEMPLATE_TYPE}}
+-- Created: {{CURRENT_TIMESTAMP}}
+
+-- Create extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "vector";
+
+-- Create shared database if it doesn't exist
+SELECT 'CREATE DATABASE shared_db'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'shared_db')\gexec
+
+-- Connect to shared database
+\c shared_db;
+
+-- Create schemas for different project types
+CREATE SCHEMA IF NOT EXISTS rag_projects;
+CREATE SCHEMA IF NOT EXISTS agent_projects;
+CREATE SCHEMA IF NOT EXISTS common_services;
+
+-- Set search path
+SET search_path TO common_services, rag_projects, agent_projects, public;
+
+-- Common services tables
+CREATE TABLE IF NOT EXISTS common_services.service_registry (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    service_name VARCHAR(100) NOT NULL UNIQUE,
+    service_type VARCHAR(50) NOT NULL,
+    endpoint_url VARCHAR(255),
+    health_check_url VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'active',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS common_services.user_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL,
+    session_token VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS common_services.audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id VARCHAR(100),
+    details JSONB DEFAULT '{}',
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- RAG projects schema
+CREATE TABLE IF NOT EXISTS rag_projects.documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100),
+    file_size BIGINT,
+    content TEXT,
+    metadata JSONB DEFAULT '{}',
+    embedding vector(1536), -- OpenAI embedding dimension
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rag_projects.chat_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL,
+    session_name VARCHAR(255),
+    system_prompt TEXT,
+    model_config JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rag_projects.chat_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES rag_projects.chat_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent projects schema
+CREATE TABLE IF NOT EXISTS agent_projects.agents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL,
+    agent_name VARCHAR(255) NOT NULL,
+    agent_type VARCHAR(50) NOT NULL,
+    system_prompt TEXT,
+    tools JSONB DEFAULT '[]',
+    config JSONB DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agent_projects.agent_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id UUID NOT NULL REFERENCES agent_projects.agents(id) ON DELETE CASCADE,
+    execution_id VARCHAR(100) NOT NULL,
+    status VARCHAR(20) DEFAULT 'running',
+    input_data JSONB,
+    output_data JSONB,
+    error_message TEXT,
+    execution_time_ms INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS agent_projects.agent_memory (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id UUID NOT NULL REFERENCES agent_projects.agents(id) ON DELETE CASCADE,
+    memory_type VARCHAR(50) NOT NULL,
+    memory_key VARCHAR(255) NOT NULL,
+    memory_value JSONB NOT NULL,
+    embedding vector(1536),
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id, memory_type, memory_key)
+);
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON rag_projects.documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_embedding ON rag_projects.documents USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON rag_projects.chat_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON rag_projects.chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON rag_projects.chat_messages(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_agents_user_id ON agent_projects.agents(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_projects.agent_executions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_projects.agent_executions(status);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_id ON agent_projects.agent_memory(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_embedding ON agent_projects.agent_memory USING ivfflat (embedding vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS idx_service_registry_status ON common_services.service_registry(status);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON common_services.user_sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON common_services.user_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON common_services.audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON common_services.audit_logs(created_at);
+
+-- Create functions for common operations
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Create triggers for updated_at columns
+CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON rag_projects.documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON rag_projects.chat_sessions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agents_updated_at BEFORE UPDATE ON agent_projects.agents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Insert initial service registry entries
+INSERT INTO common_services.service_registry (service_name, service_type, endpoint_url, health_check_url) VALUES
+    ('postgres', 'database', 'postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@{{USERNAME}}-postgres:5432/shared_db', NULL),
+    ('mongodb', 'database', 'mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@{{USERNAME}}-mongodb:27017/shared_db', NULL),
+    ('redis', 'cache', 'redis://{{USERNAME}}_redis_2024@{{USERNAME}}-redis:6379/0', NULL),
+    ('chromadb', 'vector_db', 'http://{{USERNAME}}-chromadb:8000', 'http://{{USERNAME}}-chromadb:8000/api/v2/heartbeat')
+ON CONFLICT (service_name) DO NOTHING;
+
+-- Grant permissions
+GRANT USAGE ON SCHEMA common_services TO {{USERNAME}}_user;
+GRANT USAGE ON SCHEMA rag_projects TO {{USERNAME}}_user;
+GRANT USAGE ON SCHEMA agent_projects TO {{USERNAME}}_user;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA common_services TO {{USERNAME}}_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA rag_projects TO {{USERNAME}}_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA agent_projects TO {{USERNAME}}_user;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA common_services TO {{USERNAME}}_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA rag_projects TO {{USERNAME}}_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA agent_projects TO {{USERNAME}}_user;
+
+-- Create user-specific views for easier access
+CREATE OR REPLACE VIEW rag_projects.user_documents AS
+SELECT * FROM rag_projects.documents WHERE user_id = current_setting('app.current_user_id', true);
+
+CREATE OR REPLACE VIEW rag_projects.user_chat_sessions AS
+SELECT * FROM rag_projects.chat_sessions WHERE user_id = current_setting('app.current_user_id', true);
+
+CREATE OR REPLACE VIEW agent_projects.user_agents AS
+SELECT * FROM agent_projects.agents WHERE user_id = current_setting('app.current_user_id', true);
+
+-- Log initialization completion
+INSERT INTO common_services.audit_logs (user_id, action, resource_type, details) VALUES
+    ('{{USERNAME}}', 'database_initialized', 'postgresql', '{"template_type": "{{TEMPLATE_TYPE}}", "project_name": "{{PROJECT_NAME}}"}');
+
+-- Display initialization summary
+SELECT 
+    'PostgreSQL initialization completed for user {{USERNAME}}' as message,
+    '{{PROJECT_NAME}}' as project_name,
+    '{{TEMPLATE_TYPE}}' as template_type,
+    CURRENT_TIMESTAMP as initialized_at;

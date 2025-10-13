@@ -1,0 +1,237 @@
+# Common Infrastructure Project
+
+This project provides shared infrastructure services for your application projects.
+
+## Overview
+
+This common infrastructure includes:
+- **PostgreSQL Database** with pgvector extension
+- **MongoDB Database** for document storage
+- **Redis Cache** for session and data caching
+- **ChromaDB** for vector similarity search
+- **Jaeger** for distributed tracing
+- **Prometheus** for metrics collection
+- **Grafana** for metrics visualization
+
+## Services and Ports
+
+All services are accessible on your assigned ports:
+
+| Service | Port | Purpose | Access |
+|---------|------|---------|---------|
+| PostgreSQL | {{POSTGRES_PORT}} | Primary database | `postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/shared_db` |
+| MongoDB | {{MONGODB_PORT}} | Document database | `mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@localhost:{{MONGODB_PORT}}/shared_db` |
+| Redis | {{REDIS_PORT}} | Cache & sessions | `redis://:{{USERNAME}}_redis_2024@localhost:{{REDIS_PORT}}` |
+| ChromaDB | {{CHROMADB_PORT}} | Vector database | `http://localhost:{{CHROMADB_PORT}}` |
+| Jaeger UI | {{JAEGER_UI_PORT}} | Tracing dashboard | `http://localhost:{{JAEGER_UI_PORT}}` |
+| Prometheus | {{PROMETHEUS_PORT}} | Metrics API | `http://localhost:{{PROMETHEUS_PORT}}` |
+| Grafana | {{GRAFANA_PORT}} | Metrics dashboard | `http://localhost:{{GRAFANA_PORT}}` |
+
+## Quick Start
+
+1. **Start all services:**
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Check service status:**
+   ```bash
+   docker-compose ps
+   ```
+
+3. **View logs:**
+   ```bash
+   docker-compose logs -f
+   ```
+
+## Service Configuration
+
+### PostgreSQL Database
+- **Database:** `shared_db`
+- **Username:** `{{USERNAME}}_user`
+- **Password:** `{{USERNAME}}_password_2024`
+- **Extensions:** pgvector for vector operations
+- **Connection from applications:**
+  ```bash
+  # From Docker containers (use container hostname)
+  DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@{{USERNAME}}-postgres:5432/shared_db
+  
+  # From local development (use localhost)
+  DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/shared_db
+  ```
+
+### MongoDB Database
+- **Database:** `shared_db`
+- **Admin Username:** `{{USERNAME}}_admin`
+- **Admin Password:** `{{USERNAME}}_password_2024`
+- **Connection from applications:**
+  ```bash
+  # From Docker containers
+  MONGODB_URL=mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@{{USERNAME}}-mongodb:27017/shared_db
+  
+  # From local development
+  MONGODB_URL=mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@localhost:{{MONGODB_PORT}}/shared_db
+  ```
+
+### Redis Cache
+- **Password:** `{{USERNAME}}_redis_2024`
+- **Connection from applications:**
+  ```bash
+  # From Docker containers
+  REDIS_URL=redis://:{{USERNAME}}_redis_2024@{{USERNAME}}-redis:6379
+  
+  # From local development
+  REDIS_URL=redis://:{{USERNAME}}_redis_2024@localhost:{{REDIS_PORT}}
+  ```
+
+### ChromaDB Vector Database
+- **API Endpoint:** `http://{{USERNAME}}-chromadb:8000` (from containers)
+- **Local Access:** `http://localhost:{{CHROMADB_PORT}}`
+- **Usage in applications:**
+  ```python
+  import chromadb
+  
+  # From Docker containers
+  client = chromadb.HttpClient(host="{{USERNAME}}-chromadb", port=8000)
+  
+  # From local development
+  client = chromadb.HttpClient(host="localhost", port={{CHROMADB_PORT}})
+  ```
+
+## Monitoring and Observability
+
+### Grafana Dashboard
+- **URL:** `http://localhost:{{GRAFANA_PORT}}`
+- **Username:** `admin`
+- **Password:** `{{USERNAME}}_password_2024`
+- **Features:** Pre-configured dashboards for all services
+
+### Jaeger Tracing
+- **URL:** `http://localhost:{{JAEGER_UI_PORT}}`
+- **Usage:** View distributed traces from your applications
+- **OTLP Endpoints:**
+  - gRPC: `http://{{USERNAME}}-jaeger:4317`
+  - HTTP: `http://{{USERNAME}}-jaeger:4318`
+
+### Prometheus Metrics
+- **URL:** `http://localhost:{{PROMETHEUS_PORT}}`
+- **Usage:** Query metrics and create alerts
+- **Scrape Targets:** All infrastructure services
+
+## Application Integration
+
+### Connecting Application Projects
+
+When you create RAG or Agent projects, they can connect to this shared infrastructure:
+
+```bash
+# Create application projects that use this common infrastructure
+python cli.py create-project my-rag --template rag
+python cli.py create-project my-agent --template agent
+```
+
+### Environment Variables for Applications
+
+Add these to your application's `.env` file:
+
+```bash
+# Database connections (use container hostnames from Docker, localhost for local dev)
+DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@{{USERNAME}}-postgres:5432/shared_db
+MONGODB_URL=mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@{{USERNAME}}-mongodb:27017/shared_db
+REDIS_URL=redis://:{{USERNAME}}_redis_2024@{{USERNAME}}-redis:6379
+
+# Vector database
+CHROMADB_HOST={{USERNAME}}-chromadb
+CHROMADB_PORT=8000
+
+# Observability
+JAEGER_ENDPOINT=http://{{USERNAME}}-jaeger:4318/v1/traces
+PROMETHEUS_URL=http://{{USERNAME}}-prometheus:9090
+```
+
+### Network Configuration
+
+All services use the shared network: `{{USERNAME}}-network`
+
+Your application containers should join this network to communicate with infrastructure services:
+
+```yaml
+# In your application's docker-compose.yml
+networks:
+  default:
+    external: true
+    name: {{USERNAME}}-network
+```
+
+## Data Persistence
+
+All data is stored in named Docker volumes:
+- `{{USERNAME}}-postgres-data`: PostgreSQL database files
+- `{{USERNAME}}-mongodb-data`: MongoDB database files
+- `{{USERNAME}}-redis-data`: Redis persistence files
+- `{{USERNAME}}-chromadb-data`: ChromaDB vector data
+- `{{USERNAME}}-prometheus-data`: Prometheus metrics data
+- `{{USERNAME}}-grafana-data`: Grafana dashboards and settings
+
+## Maintenance
+
+### Backup Data
+```bash
+# Backup PostgreSQL
+docker-compose exec postgres pg_dump -U {{USERNAME}}_user shared_db > backup.sql
+
+# Backup MongoDB
+docker-compose exec mongodb mongodump --username {{USERNAME}}_admin --password {{USERNAME}}_password_2024 --db shared_db --out /tmp/backup
+docker cp $(docker-compose ps -q mongodb):/tmp/backup ./mongodb_backup
+```
+
+### Update Services
+```bash
+# Pull latest images
+docker-compose pull
+
+# Restart with new images
+docker-compose up -d
+```
+
+### Clean Up
+```bash
+# Stop all services
+docker-compose down
+
+# Remove volumes (WARNING: This deletes all data!)
+docker-compose down -v
+```
+
+## Troubleshooting
+
+### Service Won't Start
+1. Check logs: `docker-compose logs <service-name>`
+2. Verify ports aren't in use: `netstat -tulpn | grep <port>`
+3. Check disk space: `df -h`
+
+### Connection Issues
+1. Verify network exists: `docker network ls | grep {{USERNAME}}-network`
+2. Check service health: `docker-compose ps`
+3. Test connectivity: `docker-compose exec <service> ping <target-service>`
+
+### Performance Issues
+1. Monitor resource usage: `docker stats`
+2. Check Grafana dashboards for metrics
+3. Review Prometheus alerts
+
+## Security Notes
+
+- All services use strong passwords with your username prefix
+- Services are isolated within your Docker network
+- External access is only through assigned ports
+- No services expose default ports to avoid conflicts
+
+## Next Steps
+
+1. **Start the infrastructure:** `docker-compose up -d`
+2. **Verify services:** Check Grafana at `http://localhost:{{GRAFANA_PORT}}`
+3. **Create applications:** Use the CLI to create RAG or Agent projects
+4. **Monitor usage:** Use Jaeger and Prometheus for observability
+
+For more information, see the main project documentation or use `python cli.py --help`.

@@ -1,0 +1,335 @@
+-- PostgreSQL Initialization Script for {{USERNAME}} - Agent Project
+-- Generated for project: {{PROJECT_NAME}}
+-- Template type: {{TEMPLATE_TYPE}}
+-- Created: {{CURRENT_TIMESTAMP}}
+
+-- Create extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "vector";
+
+-- Create agent system database if it doesn't exist
+SELECT 'CREATE DATABASE agent_system'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'agent_system')\gexec
+
+-- Connect to agent database
+\c agent_system;
+
+-- Set search path
+SET search_path TO public;
+
+-- Agent definitions table
+CREATE TABLE IF NOT EXISTS agents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    agent_name VARCHAR(255) NOT NULL,
+    agent_type VARCHAR(50) NOT NULL CHECK (agent_type IN ('conversational', 'task_executor', 'data_processor', 'workflow', 'custom')),
+    description TEXT,
+    system_prompt TEXT NOT NULL,
+    model_name VARCHAR(100) DEFAULT 'gpt-3.5-turbo',
+    model_config JSONB DEFAULT '{"temperature": 0.7, "max_tokens": 1000}',
+    tools JSONB DEFAULT '[]',
+    capabilities JSONB DEFAULT '{}',
+    constraints JSONB DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'training', 'archived')),
+    version INTEGER DEFAULT 1,
+    parent_agent_id UUID REFERENCES agents(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent executions table for tracking runs
+CREATE TABLE IF NOT EXISTS agent_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    execution_id VARCHAR(100) NOT NULL UNIQUE,
+    trigger_type VARCHAR(50) NOT NULL CHECK (trigger_type IN ('manual', 'scheduled', 'webhook', 'event')),
+    trigger_data JSONB DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'running' CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'timeout')),
+    input_data JSONB,
+    output_data JSONB,
+    error_message TEXT,
+    error_details JSONB,
+    execution_steps JSONB DEFAULT '[]',
+    metrics JSONB DEFAULT '{}',
+    execution_time_ms INTEGER,
+    tokens_used INTEGER,
+    cost_estimate DECIMAL(10,4),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Agent memory for persistent storage
+CREATE TABLE IF NOT EXISTS agent_memory (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    memory_type VARCHAR(50) NOT NULL CHECK (memory_type IN ('short_term', 'long_term', 'episodic', 'semantic', 'procedural')),
+    memory_key VARCHAR(255) NOT NULL,
+    memory_value JSONB NOT NULL,
+    embedding vector(1536),
+    importance_score FLOAT DEFAULT 0.5 CHECK (importance_score >= 0 AND importance_score <= 1),
+    access_count INTEGER DEFAULT 0,
+    last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id, memory_type, memory_key)
+);
+
+-- Agent tools and capabilities
+CREATE TABLE IF NOT EXISTS agent_tools (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tool_name VARCHAR(100) NOT NULL UNIQUE,
+    tool_type VARCHAR(50) NOT NULL CHECK (tool_type IN ('function', 'api', 'database', 'file_system', 'web_scraper', 'custom')),
+    description TEXT NOT NULL,
+    parameters_schema JSONB NOT NULL,
+    implementation JSONB NOT NULL,
+    security_level VARCHAR(20) DEFAULT 'medium' CHECK (security_level IN ('low', 'medium', 'high', 'restricted')),
+    usage_cost DECIMAL(10,6) DEFAULT 0,
+    rate_limit_per_minute INTEGER DEFAULT 60,
+    enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent workflows for complex multi-step processes
+CREATE TABLE IF NOT EXISTS agent_workflows (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    workflow_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    workflow_definition JSONB NOT NULL,
+    trigger_conditions JSONB DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'draft')),
+    version INTEGER DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Workflow executions
+CREATE TABLE IF NOT EXISTS workflow_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workflow_id UUID NOT NULL REFERENCES agent_workflows(id) ON DELETE CASCADE,
+    execution_id VARCHAR(100) NOT NULL UNIQUE,
+    status VARCHAR(20) DEFAULT 'running' CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+    input_data JSONB,
+    output_data JSONB,
+    current_step INTEGER DEFAULT 0,
+    step_results JSONB DEFAULT '[]',
+    error_message TEXT,
+    execution_time_ms INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Agent conversations for chat-based agents
+CREATE TABLE IF NOT EXISTS agent_conversations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    conversation_name VARCHAR(255),
+    context JSONB DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed', 'archived')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Messages within conversations
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_id UUID NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'agent', 'system', 'tool')),
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    tool_calls JSONB DEFAULT '[]',
+    processing_time_ms INTEGER,
+    tokens_used INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent learning and feedback
+CREATE TABLE IF NOT EXISTS agent_feedback (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    execution_id UUID REFERENCES agent_executions(id) ON DELETE SET NULL,
+    feedback_type VARCHAR(50) NOT NULL CHECK (feedback_type IN ('rating', 'correction', 'improvement', 'bug_report')),
+    feedback_data JSONB NOT NULL,
+    user_id VARCHAR(100) NOT NULL DEFAULT '{{USERNAME}}',
+    processed BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_agents_user_id ON agents(user_id);
+CREATE INDEX IF NOT EXISTS idx_agents_type ON agents(agent_type);
+CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+CREATE INDEX IF NOT EXISTS idx_agents_created_at ON agents(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_id ON agent_executions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_status ON agent_executions(status);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_created_at ON agent_executions(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_execution_id ON agent_executions(execution_id);
+
+CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_id ON agent_memory(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_importance ON agent_memory(importance_score);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_expires ON agent_memory(expires_at);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_embedding ON agent_memory USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+CREATE INDEX IF NOT EXISTS idx_agent_tools_type ON agent_tools(tool_type);
+CREATE INDEX IF NOT EXISTS idx_agent_tools_enabled ON agent_tools(enabled);
+
+CREATE INDEX IF NOT EXISTS idx_agent_workflows_user_id ON agent_workflows(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_workflows_status ON agent_workflows(status);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_workflow_id ON workflow_executions(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_status ON workflow_executions(status);
+
+CREATE INDEX IF NOT EXISTS idx_agent_conversations_agent_id ON agent_conversations(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_conversations_user_id ON agent_conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_conversations_status ON agent_conversations(status);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_id ON conversation_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_role ON conversation_messages(role);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_created_at ON conversation_messages(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_agent_id ON agent_feedback(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_type ON agent_feedback(feedback_type);
+CREATE INDEX IF NOT EXISTS idx_agent_feedback_processed ON agent_feedback(processed);
+
+-- Create functions for common operations
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Function to update memory access tracking
+CREATE OR REPLACE FUNCTION update_memory_access()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.access_count = OLD.access_count + 1;
+    NEW.last_accessed_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Function for memory similarity search
+CREATE OR REPLACE FUNCTION search_similar_memories(
+    target_agent_id UUID,
+    query_embedding vector(1536),
+    memory_types VARCHAR[] DEFAULT ARRAY['semantic', 'episodic'],
+    similarity_threshold float DEFAULT 0.7,
+    max_results int DEFAULT 10
+)
+RETURNS TABLE (
+    memory_id UUID,
+    memory_key VARCHAR(255),
+    memory_value JSONB,
+    similarity FLOAT,
+    importance_score FLOAT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        am.id,
+        am.memory_key,
+        am.memory_value,
+        1 - (am.embedding <=> query_embedding) as similarity,
+        am.importance_score
+    FROM agent_memory am
+    WHERE am.agent_id = target_agent_id
+    AND am.memory_type = ANY(memory_types)
+    AND (am.expires_at IS NULL OR am.expires_at > CURRENT_TIMESTAMP)
+    AND 1 - (am.embedding <=> query_embedding) >= similarity_threshold
+    ORDER BY am.embedding <=> query_embedding, am.importance_score DESC
+    LIMIT max_results;
+END;
+$$ language 'plpgsql';
+
+-- Create triggers
+CREATE TRIGGER update_agents_updated_at BEFORE UPDATE ON agents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agent_tools_updated_at BEFORE UPDATE ON agent_tools
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agent_workflows_updated_at BEFORE UPDATE ON agent_workflows
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agent_conversations_updated_at BEFORE UPDATE ON agent_conversations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_memory_access_trigger BEFORE UPDATE ON agent_memory
+    FOR EACH ROW EXECUTE FUNCTION update_memory_access();
+
+-- Insert default tools
+INSERT INTO agent_tools (tool_name, tool_type, description, parameters_schema, implementation) VALUES
+    ('web_search', 'api', 'Search the web for information', 
+     '{"type": "object", "properties": {"query": {"type": "string"}, "max_results": {"type": "integer", "default": 5}}}',
+     '{"endpoint": "https://api.search.com/v1/search", "method": "GET", "auth_required": true}'),
+    ('file_reader', 'file_system', 'Read content from files',
+     '{"type": "object", "properties": {"file_path": {"type": "string"}, "encoding": {"type": "string", "default": "utf-8"}}}',
+     '{"type": "local_file", "permissions": ["read"], "allowed_extensions": [".txt", ".md", ".json", ".csv"]}'),
+    ('calculator', 'function', 'Perform mathematical calculations',
+     '{"type": "object", "properties": {"expression": {"type": "string"}}}',
+     '{"type": "python_eval", "safe_mode": true, "allowed_modules": ["math", "statistics"]}'),
+    ('database_query', 'database', 'Query the agent database',
+     '{"type": "object", "properties": {"query": {"type": "string"}, "parameters": {"type": "array"}}}',
+     '{"type": "sql_query", "allowed_operations": ["SELECT"], "max_rows": 1000}')
+ON CONFLICT (tool_name) DO NOTHING;
+
+-- Insert sample agent
+INSERT INTO agents (agent_name, agent_type, description, system_prompt, tools) VALUES
+    ('Assistant Agent', 'conversational', 'A helpful conversational agent for general tasks',
+     'You are a helpful AI assistant. You can help with various tasks including answering questions, performing calculations, and searching for information. Always be helpful, accurate, and concise.',
+     '["web_search", "calculator", "file_reader"]')
+ON CONFLICT DO NOTHING;
+
+-- Grant permissions to application user
+GRANT USAGE ON SCHEMA public TO {{USERNAME}}_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {{USERNAME}}_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {{USERNAME}}_user;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO {{USERNAME}}_user;
+
+-- Create views for easier querying
+CREATE OR REPLACE VIEW user_agents_summary AS
+SELECT 
+    a.id,
+    a.agent_name,
+    a.agent_type,
+    a.status,
+    a.created_at,
+    COUNT(ae.id) as execution_count,
+    MAX(ae.created_at) as last_execution_at,
+    COUNT(ac.id) as conversation_count
+FROM agents a
+LEFT JOIN agent_executions ae ON a.id = ae.agent_id
+LEFT JOIN agent_conversations ac ON a.id = ac.agent_id
+WHERE a.user_id = '{{USERNAME}}'
+GROUP BY a.id, a.agent_name, a.agent_type, a.status, a.created_at;
+
+CREATE OR REPLACE VIEW agent_performance_metrics AS
+SELECT 
+    a.id as agent_id,
+    a.agent_name,
+    COUNT(ae.id) as total_executions,
+    COUNT(CASE WHEN ae.status = 'completed' THEN 1 END) as successful_executions,
+    COUNT(CASE WHEN ae.status = 'failed' THEN 1 END) as failed_executions,
+    AVG(ae.execution_time_ms) as avg_execution_time_ms,
+    SUM(ae.tokens_used) as total_tokens_used,
+    SUM(ae.cost_estimate) as total_cost_estimate
+FROM agents a
+LEFT JOIN agent_executions ae ON a.id = ae.agent_id
+WHERE a.user_id = '{{USERNAME}}'
+GROUP BY a.id, a.agent_name;
+
+-- Display initialization summary
+SELECT 
+    'Agent PostgreSQL initialization completed for user {{USERNAME}}' as message,
+    '{{PROJECT_NAME}}' as project_name,
+    'agent_system' as database_name,
+    CURRENT_TIMESTAMP as initialized_at;

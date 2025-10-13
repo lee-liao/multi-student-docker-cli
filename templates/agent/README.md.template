@@ -1,0 +1,494 @@
+# {{PROJECT_NAME}} Agent Project - {{USERNAME}}
+
+## Overview
+
+This is an AI Agent orchestration project that provides intelligent task automation and workflow management. The system includes a backend API for agent coordination, a frontend management interface, and background workers for task execution.
+
+## Your Assigned Ports
+
+{{#if HAS_COMMON_PROJECT}}
+**Shared Infrastructure Mode** - Using existing common project services
+
+**Your Application Ports:**
+- Agent Backend API: localhost:{{BACKEND_PORT}}
+- Agent Frontend UI: localhost:{{FRONTEND_PORT}}
+- Agent Worker Service: localhost:{{WORKER_PORT}}
+
+**Shared Infrastructure Ports (from common project):**
+- PostgreSQL: localhost:{{POSTGRES_PORT}}
+- MongoDB: localhost:{{MONGODB_PORT}}
+- Redis: localhost:{{REDIS_PORT}}
+- ChromaDB: localhost:{{CHROMADB_PORT}}
+- Jaeger UI: localhost:{{JAEGER_UI_PORT}}
+- Prometheus: localhost:{{PROMETHEUS_PORT}}
+- Grafana: localhost:{{GRAFANA_PORT}}
+{{else}}
+**Self-Contained Mode** - All services included in this project
+
+**Your Assigned Ports:**
+- PostgreSQL: localhost:{{POSTGRES_PORT}}
+- MongoDB: localhost:{{MONGODB_PORT}}
+- Redis: localhost:{{REDIS_PORT}}
+- ChromaDB: localhost:{{CHROMADB_PORT}}
+- Agent Backend API: localhost:{{BACKEND_PORT}}
+- Agent Frontend UI: localhost:{{FRONTEND_PORT}}
+- Agent Worker Service: localhost:{{WORKER_PORT}}
+{{/if}}
+
+**Total Port Allocation:** {{TOTAL_PORTS}} ports
+{{#if HAS_TWO_SEGMENTS}}
+- Segment 1: {{SEGMENT1_START}}-{{SEGMENT1_END}}
+- Segment 2: {{SEGMENT2_START}}-{{SEGMENT2_END}}
+{{else}}
+- Port Range: {{SEGMENT1_START}}-{{SEGMENT1_END}}
+{{/if}}
+
+## Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Agent Frontend │    │  Agent Backend  │    │  Agent Worker   │
+│   (Management)  │◄──►│ (Orchestration) │◄──►│  (Execution)    │
+│                 │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   Data Layer    │
+                    │ PostgreSQL +    │
+                    │ Redis + ChromaDB│
+                    └─────────────────┘
+```
+
+## Quick Start
+
+1. **Start Infrastructure:**
+   {{#if HAS_COMMON_PROJECT}}
+   ```bash
+   # Ensure common project is running
+   cd ../common && docker-compose up -d
+   ```
+   {{else}}
+   ```bash
+   # Start all services
+   docker-compose up -d
+   ```
+   {{/if}}
+
+2. **Access Services:**
+   - Agent Management UI: http://localhost:{{FRONTEND_PORT}}
+   - Agent API: http://localhost:{{BACKEND_PORT}}
+   - API Documentation: http://localhost:{{BACKEND_PORT}}/docs
+
+3. **View Logs:**
+   ```bash
+   docker-compose logs -f agent-backend
+   docker-compose logs -f agent-worker
+   ```
+
+## Local Development Configuration
+
+### For Client-Side Rendering (CSR) - React, Vue, Angular
+Update your .env file with:
+```bash
+# Database Configuration
+DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/agent_system
+MONGODB_URL=mongodb://{{USERNAME}}_admin:{{USERNAME}}_password_2024@localhost:{{MONGODB_PORT}}/agent_system
+
+# Vector Database
+CHROMADB_HOST=localhost
+CHROMADB_PORT={{CHROMADB_PORT}}
+
+# Cache & Message Queue
+REDIS_URL=redis://:{{USERNAME}}_redis_2024@localhost:{{REDIS_PORT}}/0
+
+# Agent Configuration
+AGENT_BACKEND_URL=http://localhost:{{BACKEND_PORT}}
+WORKER_CONCURRENCY=4
+
+# CORS Configuration for CSR
+CORS_ORIGINS={{CORS_ORIGINS_CSR}}
+```
+
+### For Server-Side Rendering (SSR) - Next.js, Nuxt, SvelteKit
+Update your .env file with:
+```bash
+# Database Configuration (same as above)
+DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/agent_system
+
+# CORS Configuration for SSR (includes container hostnames)
+CORS_ORIGINS={{CORS_ORIGINS_SSR}}
+
+# Internal Service URLs (for SSR)
+AGENT_BACKEND_INTERNAL=http://{{USERNAME}}-agent-backend:8000
+WORKER_INTERNAL=http://{{USERNAME}}-agent-worker:8001
+```
+
+## Docker Commands
+
+### Build Your Custom Images
+```bash
+# Build custom agent backend image
+cd backend/
+docker build -t {{USERNAME}}-agent-backend:latest .
+
+# Build custom agent frontend image
+cd frontend/
+docker build -t {{USERNAME}}-agent-frontend:latest .
+
+# Build custom agent worker image
+cd worker/
+docker build -t {{USERNAME}}-agent-worker:latest .
+```
+
+### Manage Your Services
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs for specific services
+docker-compose logs -f agent-backend
+docker-compose logs -f agent-frontend
+docker-compose logs -f agent-worker
+
+# Stop all services
+docker-compose down
+
+# Rebuild and restart
+docker-compose up -d --build
+
+# Scale worker instances
+docker-compose up -d --scale agent-worker=3
+```
+
+### Save/Load Images for Backup
+```bash
+# Save images to backup
+mkdir -p ~/backups
+docker save {{USERNAME}}-agent-backend:latest > ~/backups/agent-backend.tar
+docker save {{USERNAME}}-agent-frontend:latest > ~/backups/agent-frontend.tar
+docker save {{USERNAME}}-agent-worker:latest > ~/backups/agent-worker.tar
+
+# Load images from backup
+docker load < ~/backups/agent-backend.tar
+docker load < ~/backups/agent-frontend.tar
+docker load < ~/backups/agent-worker.tar
+```
+
+## Agent System Configuration
+
+### Environment Variables
+```bash
+# Agent Behavior
+AGENT_MAX_ITERATIONS=10
+AGENT_TIMEOUT=300
+AGENT_MEMORY_LIMIT=1000
+
+# LLM Configuration
+OPENAI_API_KEY=your_openai_key_here
+ANTHROPIC_API_KEY=your_anthropic_key_here
+MODEL_PROVIDER=openai  # or anthropic
+
+# Task Queue
+TASK_QUEUE_SIZE=100
+WORKER_BATCH_SIZE=5
+RETRY_ATTEMPTS=3
+
+# Monitoring
+ENABLE_TRACING=true
+JAEGER_ENDPOINT=http://{{USERNAME}}-jaeger:14268/api/traces
+```
+
+### Database Schema
+The agent system uses the following database structure:
+- **agents**: Agent definitions and configurations
+- **tasks**: Task queue and execution history
+- **workflows**: Workflow definitions and state
+- **executions**: Execution logs and results
+- **knowledge**: Vector embeddings and knowledge base
+
+## Development Workflow
+
+### 1. Backend Development (Agent Orchestration)
+```bash
+# Run backend locally for development
+cd backend/
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port {{BACKEND_PORT}} --reload
+
+# Test API endpoints
+curl http://localhost:{{BACKEND_PORT}}/health
+curl http://localhost:{{BACKEND_PORT}}/agents
+```
+
+### 2. Frontend Development (Management UI)
+```bash
+# Run frontend locally for development
+cd frontend/
+npm install
+npm run dev -- --port {{FRONTEND_PORT}}
+
+# Build for production
+npm run build
+```
+
+### 3. Worker Development (Task Execution)
+```bash
+# Run worker locally for development
+cd worker/
+pip install -r requirements.txt
+python worker.py --port {{WORKER_PORT}}
+
+# Test worker functionality
+python test_worker.py
+```
+
+### 4. Integration Testing
+```bash
+# Test full system in Docker
+docker-compose up -d --build
+
+# Run integration tests
+python tests/test_integration.py
+```
+
+## API Endpoints
+
+### Agent Management
+- `GET /agents` - List all agents
+- `POST /agents` - Create new agent
+- `GET /agents/{id}` - Get agent details
+- `PUT /agents/{id}` - Update agent
+- `DELETE /agents/{id}` - Delete agent
+
+### Task Management
+- `GET /tasks` - List tasks
+- `POST /tasks` - Create new task
+- `GET /tasks/{id}` - Get task status
+- `POST /tasks/{id}/execute` - Execute task
+
+### Workflow Management
+- `GET /workflows` - List workflows
+- `POST /workflows` - Create workflow
+- `POST /workflows/{id}/run` - Run workflow
+
+## Common Issues and Solutions
+
+### Issue: Agent backend can't connect to database
+**Solution:** Verify PostgreSQL is running and accessible:
+```bash
+{{#if HAS_COMMON_PROJECT}}
+# Check common project database
+cd ../common
+docker-compose logs postgres
+{{else}}
+# Check local database
+docker-compose logs postgres-agent
+{{/if}}
+
+# Test connection
+psql postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/agent_system
+```
+
+### Issue: "CORS policy" error in frontend
+**Solution:** Update backend .env with correct CORS origins:
+```bash
+# For CSR (client-side rendering)
+CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}}
+
+# For SSR (server-side rendering)
+CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://{{USERNAME}}-agent-frontend:3000
+```
+
+### Issue: Worker not processing tasks
+**Solution:** Check Redis connection and worker logs:
+```bash
+# Check Redis connectivity
+redis-cli -h localhost -p {{REDIS_PORT}} -a {{USERNAME}}_redis_2024 ping
+
+# Check worker logs
+docker-compose logs -f agent-worker
+```
+
+### Issue: Vector search not working
+**Solution:** Verify ChromaDB is accessible:
+```bash
+# Test ChromaDB connection
+curl http://localhost:{{CHROMADB_PORT}}/api/v1/heartbeat
+
+# Check ChromaDB logs
+{{#if HAS_COMMON_PROJECT}}
+cd ../common && docker-compose logs chromadb
+{{else}}
+docker-compose logs chromadb
+{{/if}}
+```
+
+### Issue: Frontend can't reach backend API
+**Solution:** Check network connectivity and CORS:
+```bash
+# Test backend from frontend container
+docker-compose exec agent-frontend curl http://{{USERNAME}}-agent-backend:8000/health
+
+# Verify CORS configuration
+curl -H "Origin: http://localhost:{{FRONTEND_PORT}}" \
+     -H "Access-Control-Request-Method: GET" \
+     -X OPTIONS http://localhost:{{BACKEND_PORT}}/agents
+```
+
+{{#if HAS_COMMON_PROJECT}}
+### Issue: Can't connect to shared services
+**Solution:** Ensure the common project is running and network is accessible:
+```bash
+# Check common project status
+cd ../common
+docker-compose ps
+
+# Start common services if needed
+cd ../common
+docker-compose up -d
+
+# Verify network connectivity
+docker network ls | grep {{USERNAME}}-network
+```
+{{/if}}
+
+## Monitoring and Observability
+
+### Metrics and Tracing
+{{#if HAS_COMMON_PROJECT}}
+- **Grafana Dashboard**: http://localhost:{{GRAFANA_PORT}}
+- **Jaeger Tracing**: http://localhost:{{JAEGER_UI_PORT}}
+- **Prometheus Metrics**: http://localhost:{{PROMETHEUS_PORT}}
+{{else}}
+- **Grafana Dashboard**: http://localhost:{{GRAFANA_PORT}}
+- **Jaeger Tracing**: http://localhost:{{JAEGER_UI_PORT}}
+- **Prometheus Metrics**: http://localhost:{{PROMETHEUS_PORT}}
+{{/if}}
+
+### Health Checks
+```bash
+# Check all service health
+curl http://localhost:{{BACKEND_PORT}}/health
+curl http://localhost:{{WORKER_PORT}}/health
+
+# Check database connectivity
+docker-compose exec agent-backend python -c "
+import psycopg2
+conn = psycopg2.connect('postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@{{USERNAME}}-postgres:5432/agent_system')
+print('Database connection successful')
+"
+```
+
+### Log Analysis
+```bash
+# View all logs
+docker-compose logs
+
+# Filter logs by service
+docker-compose logs agent-backend | grep ERROR
+docker-compose logs agent-worker | grep TASK
+
+# Follow logs in real-time
+docker-compose logs -f --tail=100
+```
+
+## Project Structure
+```
+{{PROJECT_NAME}}/
+├── docker-compose.yml          # Container orchestration
+├── setup.sh                    # Project setup script
+├── README.md                   # This file
+├── backend/                    # Agent orchestration service
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── main.py            # FastAPI application
+│   │   ├── agents/            # Agent management
+│   │   ├── tasks/             # Task management
+│   │   └── workflows/         # Workflow engine
+│   └── tests/
+├── frontend/                   # Management interface
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── src/
+│   │   ├── components/        # React components
+│   │   ├── pages/             # Application pages
+│   │   └── services/          # API services
+│   └── public/
+├── worker/                     # Task execution service
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── worker.py              # Main worker process
+│   ├── tasks/                 # Task implementations
+│   └── utils/                 # Utility functions
+└── database/
+    ├── init.sql               # Database schema
+    └── migrations/            # Schema migrations
+```
+
+## Security Considerations
+
+### API Security
+- All API endpoints require authentication
+- Rate limiting is enabled for public endpoints
+- Input validation and sanitization
+- SQL injection prevention
+
+### Data Protection
+- Database connections use encrypted passwords
+- Sensitive data is encrypted at rest
+- API keys are stored securely
+- Audit logging for all operations
+
+## Performance Optimization
+
+### Scaling Guidelines
+```bash
+# Scale worker instances based on load
+docker-compose up -d --scale agent-worker=5
+
+# Monitor resource usage
+docker stats
+
+# Optimize database queries
+EXPLAIN ANALYZE SELECT * FROM tasks WHERE status = 'pending';
+```
+
+### Caching Strategy
+- Redis for session and temporary data
+- Database query result caching
+- Vector embedding caching in ChromaDB
+- Frontend asset caching
+
+## Future Enhancements
+
+**CI/CD Integration:** Automated image building and deployment is planned for future development but is outside the current project scope.
+
+**Planned Features:**
+- Multi-agent collaboration
+- Advanced workflow orchestration
+- Real-time agent monitoring
+- Custom agent templates
+- Integration with external APIs
+
+---
+
+**Need Help?** 
+- Check the troubleshooting section above
+- Review your port assignments: `python cli.py show-ports`
+- Check service status: `python cli.py common-status`
+- View API documentation: http://localhost:{{BACKEND_PORT}}/docs
+
+**Useful Commands:**
+```bash
+# Quick status check
+docker-compose ps && curl -s http://localhost:{{BACKEND_PORT}}/health
+
+# Reset everything
+docker-compose down -v && docker-compose up -d --build
+
+# Backup data
+docker-compose exec postgres-agent pg_dump -U {{USERNAME}}_user agent_system > backup.sql
+```

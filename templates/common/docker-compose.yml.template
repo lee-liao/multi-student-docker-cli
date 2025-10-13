@@ -1,0 +1,205 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: {{USERNAME}}-postgres
+    ports:
+      - "{{POSTGRES_PORT}}:5432"
+    environment:
+      - POSTGRES_DB=shared_db
+      - POSTGRES_USER={{USERNAME}}_user
+      - POSTGRES_PASSWORD={{USERNAME}}_password_2024
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/postgresql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/postgresql/migrations:/docker-entrypoint-initdb.d/migrations
+    networks:
+      - {{USERNAME}}-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{USERNAME}}_user -d shared_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:6
+    container_name: {{USERNAME}}-mongodb
+    ports:
+      - "{{MONGODB_PORT}}:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME={{USERNAME}}_admin
+      - MONGO_INITDB_ROOT_PASSWORD={{USERNAME}}_password_2024
+      - MONGO_INITDB_DATABASE=shared_db
+    volumes:
+      - mongodb_data:/data/db
+      - ./database/mongodb/init.js:/docker-entrypoint-initdb.d/init.js
+    networks:
+      - {{USERNAME}}-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: {{USERNAME}}-redis
+    ports:
+      - "{{REDIS_PORT}}:6379"
+    command: redis-server --appendonly yes --requirepass {{USERNAME}}_redis_2024
+    volumes:
+      - redis_data:/data
+    networks:
+      - {{USERNAME}}-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+  # ChromaDB for vector similarity search
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: {{USERNAME}}-chromadb
+    ports:
+      - "{{CHROMADB_PORT}}:8000"
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - PERSIST_DIRECTORY=/chroma/data
+      - ANONYMIZED_TELEMETRY=False
+    volumes:
+      - chromadb_data:/chroma/data
+    networks:
+      - {{USERNAME}}-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Jaeger All-in-One (tracing)
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: {{USERNAME}}-jaeger
+    ports:
+      - "{{JAEGER_UI_PORT}}:16686"  # Jaeger UI
+      - "14268:14268"               # HTTP collector endpoint
+      - "14250:14250"               # gRPC collector endpoint
+      - "4317:4317"                 # OTLP gRPC receiver
+      - "4318:4318"                 # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - METRICS_STORAGE_TYPE=prometheus
+      - PROMETHEUS_SERVER_URL=http://{{USERNAME}}-prometheus:9090
+    networks:
+      - {{USERNAME}}-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Prometheus (metrics)
+  prometheus:
+    image: prom/prometheus:v2.47.2
+    container_name: {{USERNAME}}-prometheus
+    ports:
+      - "{{PROMETHEUS_PORT}}:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - {{USERNAME}}-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Grafana (metrics visualization)
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: {{USERNAME}}-grafana
+    ports:
+      - "{{GRAFANA_PORT}}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD={{USERNAME}}_password_2024
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - {{USERNAME}}-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+networks:
+  {{USERNAME}}-network:
+    name: {{USERNAME}}-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: {{USERNAME}}-postgres-data
+  mongodb_data:
+    name: {{USERNAME}}-mongodb-data
+  redis_data:
+    name: {{USERNAME}}-redis-data
+  chromadb_data:
+    name: {{USERNAME}}-chromadb-data
+  prometheus_data:
+    name: {{USERNAME}}-prometheus-data
+  grafana_data:
+    name: {{USERNAME}}-grafana-data

@@ -1,0 +1,156 @@
+# RAG Frontend Dockerfile for {{USERNAME}} - {{PROJECT_NAME}}
+# Specialized for RAG chat interface with file upload capabilities
+
+# Base stage
+FROM node:18-alpine as base
+
+# Set build arguments
+ARG BUILD_DATE
+ARG VERSION=1.0.0
+
+# Add metadata
+LABEL maintainer="{{USERNAME}}" \
+      version="${VERSION}" \
+      description="RAG Frontend service for {{PROJECT_NAME}}" \
+      build-date="${BUILD_DATE}" \
+      specialized="rag-chat-interface"
+
+# Install dumb-init and file processing tools
+RUN apk add --no-cache dumb-init curl
+
+# Create non-root user
+RUN addgroup -g 1000 appuser && \
+    adduser -D -s /bin/sh -u 1000 -G appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Set ownership
+RUN chown appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Dependencies stage
+FROM base as dependencies
+
+# Copy package files
+COPY --chown=appuser:appuser package*.json ./
+COPY --chown=appuser:appuser yarn.lock* ./
+
+# Install dependencies
+RUN if [ -f yarn.lock ]; then \
+        yarn install --frozen-lockfile --production=false; \
+    else \
+        npm ci --include=dev; \
+    fi
+
+# Development stage
+FROM dependencies as development
+
+# Set environment variables for RAG development
+ENV NODE_ENV=development \
+    CHOKIDAR_USEPOLLING=true \
+    WATCHPACK_POLLING=true \
+    FAST_REFRESH=true \
+    NEXT_PUBLIC_API_BASE_URL=http://localhost:{{BACKEND_PORT}} \
+    NEXT_PUBLIC_MAX_FILE_SIZE={{MAX_FILE_SIZE:-50MB}} \
+    NEXT_PUBLIC_SUPPORTED_FILE_TYPES="pdf,txt,md,docx,csv" \
+    NEXT_PUBLIC_CHUNK_SIZE={{CHUNK_SIZE:-1000}} \
+    NEXT_PUBLIC_ENABLE_STREAMING=true
+
+# Copy source code
+COPY --chown=appuser:appuser . .
+
+# Create upload directory
+RUN mkdir -p /app/public/uploads && \
+    chown -R appuser:appuser /app/public
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+# Development command
+CMD ["npm", "run", "dev"]
+
+# Build stage
+FROM dependencies as builder
+
+# Set environment for building
+ENV NODE_ENV=production \
+    NEXT_PUBLIC_API_BASE_URL={{API_BASE_URL:-/api}} \
+    NEXT_PUBLIC_MAX_FILE_SIZE={{MAX_FILE_SIZE:-50MB}} \
+    NEXT_PUBLIC_SUPPORTED_FILE_TYPES="pdf,txt,md,docx,csv" \
+    NEXT_PUBLIC_CHUNK_SIZE={{CHUNK_SIZE:-1000}} \
+    NEXT_PUBLIC_ENABLE_STREAMING=true
+
+# Copy source code
+COPY --chown=appuser:appuser . .
+
+# Build the application
+RUN if [ -f yarn.lock ]; then \
+        yarn build; \
+    else \
+        npm run build; \
+    fi
+
+# Production dependencies stage
+FROM base as prod-dependencies
+
+# Copy package files
+COPY --chown=appuser:appuser package*.json ./
+COPY --chown=appuser:appuser yarn.lock* ./
+
+# Install only production dependencies
+RUN if [ -f yarn.lock ]; then \
+        yarn install --frozen-lockfile --production=true && \
+        yarn cache clean; \
+    else \
+        npm ci --only=production && \
+        npm cache clean --force; \
+    fi
+
+# Production stage
+FROM base as production
+
+# Set environment variables for production
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0 \
+    NEXT_PUBLIC_API_BASE_URL={{API_BASE_URL:-/api}} \
+    NEXT_PUBLIC_MAX_FILE_SIZE={{MAX_FILE_SIZE:-50MB}} \
+    NEXT_PUBLIC_SUPPORTED_FILE_TYPES="pdf,txt,md,docx,csv" \
+    NEXT_PUBLIC_CHUNK_SIZE={{CHUNK_SIZE:-1000}} \
+    NEXT_PUBLIC_ENABLE_STREAMING=true
+
+# Copy production dependencies
+COPY --from=prod-dependencies --chown=appuser:appuser /app/node_modules ./node_modules
+
+# Copy built application
+COPY --from=builder --chown=appuser:appuser /app/.next ./.next
+COPY --from=builder --chown=appuser:appuser /app/public ./public
+COPY --from=builder --chown=appuser:appuser /app/package*.json ./
+COPY --from=builder --chown=appuser:appuser /app/next.config.js* ./
+
+# Create necessary directories for RAG operations
+RUN mkdir -p /app/.next/cache /app/public/uploads && \
+    chown -R appuser:appuser /app/.next /app/public
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+# Production command
+CMD ["npm", "start"]

@@ -1,0 +1,396 @@
+# {{PROJECT_NAME}} Project - {{USERNAME}}
+
+## Your Assigned Ports
+
+{{#if HAS_COMMON_PROJECT}}
+**Shared Infrastructure Mode** - Using existing common project services
+
+**Your Application Ports:**
+- Backend API: localhost:{{BACKEND_PORT}}
+- Frontend: localhost:{{FRONTEND_PORT}}
+
+**Shared Infrastructure Ports (from common project):**
+- PostgreSQL: localhost:{{POSTGRES_PORT}}
+- MongoDB: localhost:{{MONGODB_PORT}}
+- Redis: localhost:{{REDIS_PORT}}
+- ChromaDB: localhost:{{CHROMADB_PORT}}
+- Jaeger UI: localhost:{{JAEGER_UI_PORT}}
+- Prometheus: localhost:{{PROMETHEUS_PORT}}
+- Grafana: localhost:{{GRAFANA_PORT}}
+{{else}}
+**Self-Contained Mode** - All services included in this project
+
+**Your Assigned Ports:**
+- PostgreSQL: localhost:{{POSTGRES_PORT}}
+- Redis: localhost:{{REDIS_PORT}}
+- ChromaDB: localhost:{{CHROMADB_PORT}}
+- Backend API: localhost:{{BACKEND_PORT}}
+- Frontend: localhost:{{FRONTEND_PORT}}
+{{/if}}
+
+**Total Port Allocation:** {{TOTAL_PORTS}} ports
+{{#if HAS_TWO_SEGMENTS}}
+- Segment 1: {{SEGMENT1_START}}-{{SEGMENT1_END}}
+- Segment 2: {{SEGMENT2_START}}-{{SEGMENT2_END}}
+{{else}}
+- Port Range: {{SEGMENT1_START}}-{{SEGMENT1_END}}
+{{/if}}
+
+## Local Development Configuration
+
+### For Client-Side Rendering (CSR) - React, Vue, Angular
+Update your .env file with:
+```bash
+# Database Configuration
+DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/rag_chatbot
+
+# Vector Database
+CHROMADB_HOST=localhost
+CHROMADB_PORT={{CHROMADB_PORT}}
+
+# Cache
+REDIS_URL=redis://{{USERNAME}}_redis_2024@localhost:{{REDIS_PORT}}/0
+
+# CORS Configuration for CSR
+CORS_ORIGINS={{CORS_ORIGINS_CSR}}
+```
+
+### For Server-Side Rendering (SSR) - Next.js, Nuxt, SvelteKit
+Update your .env file with:
+```bash
+# Database Configuration (same as above)
+DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/rag_chatbot
+
+# CORS Configuration for SSR (includes container hostnames)
+CORS_ORIGINS={{CORS_ORIGINS_SSR}}
+```
+
+## Docker Commands
+
+### Build Your Custom Images
+```bash
+# Build custom backend image
+cd backend/
+docker build -t {{USERNAME}}-rag-backend:latest .
+
+# Build custom frontend image
+cd frontend/
+docker build -t {{USERNAME}}-rag-frontend:latest .
+```
+
+### Manage Your Services
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# Stop all services
+docker-compose down
+
+# Rebuild and restart
+docker-compose up -d --build
+```
+
+### Save/Load Images for Backup
+```bash
+# Save images to backup
+docker save {{USERNAME}}-rag-backend:latest > ~/backups/rag-backend.tar
+docker save {{USERNAME}}-rag-frontend:latest > ~/backups/rag-frontend.tar
+
+# Load images from backup
+docker load < ~/backups/rag-backend.tar
+docker load < ~/backups/rag-frontend.tar
+```
+
+## CORS Configuration Guide
+
+### Understanding CORS in RAG Applications
+
+CORS (Cross-Origin Resource Sharing) is crucial for RAG applications where your frontend needs to communicate with your backend API across different ports.
+
+#### Client-Side Rendering (CSR) - React, Vue, Angular
+For CSR applications, the browser makes API calls directly from localhost:
+```bash
+# Backend .env configuration
+CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://localhost:3000,http://localhost:3001
+
+# Example for your assigned ports
+CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://localhost:{{BACKEND_PORT}}
+```
+
+#### Server-Side Rendering (SSR) - Next.js, Nuxt, SvelteKit
+For SSR applications, you need both localhost and container hostnames:
+```bash
+# Backend .env configuration for SSR
+CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://{{USERNAME}}-rag-frontend:3000,http://{{USERNAME}}-frontend:3000
+
+# Example for your assigned ports
+CORS_ORIGINS={{CORS_ORIGINS_SSR}}
+```
+
+**Why SSR needs different CORS:**
+- **CSR**: Browser makes API calls directly from localhost
+- **SSR**: Server makes API calls from container hostname during rendering
+
+## Common Issues and Solutions
+
+### Issue: Frontend can't connect to backend
+**Symptoms:** Network errors, connection refused, or timeout errors
+
+**Solutions:**
+1. **Check CORS configuration:**
+   ```bash
+   # Ensure backend .env includes your frontend port
+   CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}}
+   ```
+
+2. **Verify backend is running:**
+   ```bash
+   curl http://localhost:{{BACKEND_PORT}}/health
+   docker-compose logs backend
+   ```
+
+3. **Test API endpoint:**
+   ```bash
+   curl -X GET http://localhost:{{BACKEND_PORT}}/api/chat \
+        -H "Origin: http://localhost:{{FRONTEND_PORT}}"
+   ```
+
+### Issue: "CORS policy" error in browser console
+**Symptoms:** Browser console shows "blocked by CORS policy"
+
+**Solutions:**
+1. **Exact origin matching:**
+   ```bash
+   # Make sure CORS_ORIGINS matches exactly (including http://)
+   CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}}  # ✅ Correct
+   CORS_ORIGINS=localhost:{{FRONTEND_PORT}}         # ❌ Missing protocol
+   ```
+
+2. **Multiple origins:**
+   ```bash
+   # Support multiple development ports
+   CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://localhost:3000,http://localhost:5173
+   ```
+
+3. **Debug CORS headers:**
+   ```bash
+   curl -H "Origin: http://localhost:{{FRONTEND_PORT}}" \
+        -H "Access-Control-Request-Method: POST" \
+        -X OPTIONS http://localhost:{{BACKEND_PORT}}/api/chat
+   ```
+
+### Issue: Database connection failed
+**Symptoms:** Database connection errors, authentication failures
+
+**Solutions:**
+1. **Verify PostgreSQL is running:**
+   ```bash
+   {{#if HAS_COMMON_PROJECT}}
+   # Check common project database
+   cd ../common
+   docker-compose logs postgres
+   {{else}}
+   # Check local database
+   docker-compose logs postgres-rag
+   {{/if}}
+   ```
+
+2. **Test database connection:**
+   ```bash
+   # Test connection manually
+   psql postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/rag_chatbot
+   ```
+
+3. **Check database initialization:**
+   ```bash
+   # Verify database and tables exist
+   docker-compose exec postgres-rag psql -U {{USERNAME}}_user -d rag_chatbot -c "\dt"
+   ```
+
+### Issue: Vector search not working
+**Symptoms:** ChromaDB connection errors, embedding failures
+
+**Solutions:**
+1. **Check ChromaDB status:**
+   ```bash
+   curl http://localhost:{{CHROMADB_PORT}}/api/v1/heartbeat
+   {{#if HAS_COMMON_PROJECT}}
+   cd ../common && docker-compose logs chromadb
+   {{else}}
+   docker-compose logs chromadb
+   {{/if}}
+   ```
+
+2. **Verify collections:**
+   ```bash
+   # List ChromaDB collections
+   curl http://localhost:{{CHROMADB_PORT}}/api/v1/collections
+   ```
+
+3. **Test embedding endpoint:**
+   ```bash
+   curl -X POST http://localhost:{{BACKEND_PORT}}/api/embed \
+        -H "Content-Type: application/json" \
+        -d '{"text": "test embedding"}'
+   ```
+
+### Issue: Works in Docker but not locally
+**Symptoms:** Application works in containers but fails in local development
+
+**Solutions:**
+1. **Update CORS for local development:**
+   ```bash
+   # Add localhost ports for local development
+   CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://localhost:8000,http://localhost:3000
+   ```
+
+2. **Use correct hostnames:**
+   ```bash
+   # Local development - use localhost
+   DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@localhost:{{POSTGRES_PORT}}/rag_chatbot
+   
+   # Docker development - use container names
+   DATABASE_URL=postgresql://{{USERNAME}}_user:{{USERNAME}}_password_2024@{{USERNAME}}-postgres:5432/rag_chatbot
+   ```
+
+### Issue: SSR API calls fail during build
+**Symptoms:** Next.js or other SSR frameworks fail during build/render
+
+**Solutions:**
+1. **Add container hostnames to CORS:**
+   ```bash
+   CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}},http://{{USERNAME}}-rag-frontend:3000
+   ```
+
+2. **Use internal service URLs:**
+   ```bash
+   # For SSR internal API calls
+   NEXT_PUBLIC_API_URL=http://localhost:{{BACKEND_PORT}}  # Client-side
+   API_URL=http://{{USERNAME}}-rag-backend:8000           # Server-side
+   ```
+
+{{#if HAS_COMMON_PROJECT}}
+### Issue: Can't connect to shared services
+**Symptoms:** Connection refused to PostgreSQL, Redis, or ChromaDB
+
+**Solutions:**
+1. **Check common project status:**
+   ```bash
+   cd ../common
+   docker-compose ps
+   python cli.py common-status
+   ```
+
+2. **Start common services:**
+   ```bash
+   cd ../common
+   docker-compose up -d
+   ```
+
+3. **Verify network connectivity:**
+   ```bash
+   # Check if containers can reach each other
+   docker-compose exec backend ping {{USERNAME}}-postgres
+   docker network ls | grep {{USERNAME}}-network
+   ```
+{{/if}}
+
+### Issue: File upload/download not working
+**Symptoms:** File operations fail, CORS errors on file endpoints
+
+**Solutions:**
+1. **Configure file upload CORS:**
+   ```bash
+   # Allow file upload origins
+   CORS_ORIGINS=http://localhost:{{FRONTEND_PORT}}
+   CORS_ALLOW_CREDENTIALS=true
+   ```
+
+2. **Check file permissions:**
+   ```bash
+   # Ensure upload directory exists and is writable
+   docker-compose exec backend ls -la /app/uploads/
+   ```
+
+### Issue: Real-time features not working
+**Symptoms:** WebSocket connections fail, real-time updates don't work
+
+**Solutions:**
+1. **WebSocket CORS configuration:**
+   ```bash
+   # Allow WebSocket connections
+   WEBSOCKET_ORIGINS=http://localhost:{{FRONTEND_PORT}}
+   ```
+
+2. **Test WebSocket connection:**
+   ```bash
+   # Test WebSocket endpoint
+   wscat -c ws://localhost:{{BACKEND_PORT}}/ws
+   ```
+
+## Development Workflow
+
+1. **Start Infrastructure:**
+   {{#if HAS_COMMON_PROJECT}}
+   ```bash
+   # Ensure common project is running
+   cd ../common && docker-compose up -d
+   ```
+   {{else}}
+   ```bash
+   # Start all services
+   docker-compose up -d
+   ```
+   {{/if}}
+
+2. **Develop Locally:**
+   ```bash
+   # Backend development (if running locally)
+   cd backend/
+   pip install -r requirements.txt
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   
+   # Frontend development (if running locally)
+   cd frontend/
+   npm install
+   npm run dev
+   ```
+
+3. **Test in Docker:**
+   ```bash
+   # Build and test in containers
+   docker-compose up -d --build
+   ```
+
+## Project Structure
+```
+{{PROJECT_NAME}}/
+├── docker-compose.yml          # Your container configuration
+├── setup.sh                    # Project setup script
+├── README.md                   # This file
+├── backend/
+│   ├── Dockerfile             # Backend container definition
+│   ├── requirements.txt       # Python dependencies
+│   └── app/                   # Your backend code
+├── frontend/
+│   ├── Dockerfile             # Frontend container definition
+│   ├── package.json           # Node.js dependencies
+│   └── src/                   # Your frontend code
+└── database/
+    └── init.sql               # Database initialization
+```
+
+## Future Enhancements
+
+**CI/CD Integration:** Automated image building and deployment is planned for future development but is outside the current project scope.
+
+---
+
+**Need Help?** Check the troubleshooting section above or review your port assignments with:
+```bash
+cli show-ports
+```
