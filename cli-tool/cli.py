@@ -159,7 +159,7 @@ class DockerComposeCLI:
                     "template": args.template,
                     "shared_mode": has_common_project,
                     "project_path": project_config.project_path,
-                    "ports_assigned": project_config.port_assignments
+                    "ports_assigned": project_config.port_assignment
                 }
             )
             
