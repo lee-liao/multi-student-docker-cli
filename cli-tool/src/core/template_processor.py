@@ -61,14 +61,16 @@ class TemplateProcessor:
         # Define service port assignments based on template type and mode
         if context.template_type == 'common':
             services = ['POSTGRES_PORT', 'MONGODB_PORT', 'REDIS_PORT', 
-                       'CHROMADB_PORT', 'JAEGER_UI_PORT', 'PROMETHEUS_PORT', 'GRAFANA_PORT']
+                       'CHROMADB_PORT', 'JAEGER_UI_PORT', 'PROMETHEUS_PORT', 'GRAFANA_PORT',
+                       'JAEGER_HTTP_PORT', 'JAEGER_GRPC_PORT', 'JAEGER_OTLP_GRPC_PORT', 'JAEGER_OTLP_HTTP_PORT']
         elif context.has_common_project:
             # Lightweight mode - only application services
             services = ['BACKEND_PORT', 'FRONTEND_PORT']
         else:
             # Self-contained mode - all services
             services = ['POSTGRES_PORT', 'MONGODB_PORT', 'REDIS_PORT', 'CHROMADB_PORT',
-                       'BACKEND_PORT', 'FRONTEND_PORT', 'JAEGER_UI_PORT', 'PROMETHEUS_PORT', 'GRAFANA_PORT']
+                       'BACKEND_PORT', 'FRONTEND_PORT', 'JAEGER_UI_PORT', 'PROMETHEUS_PORT', 'GRAFANA_PORT',
+                       'JAEGER_HTTP_PORT', 'JAEGER_GRPC_PORT', 'JAEGER_OTLP_GRPC_PORT', 'JAEGER_OTLP_HTTP_PORT']
         
         # Assign ports to services
         for service in services:
@@ -89,12 +91,19 @@ class TemplateProcessor:
             backend_port=port_assignments.get('BACKEND_PORT')
         )
         
+        # Get current user ID and group ID to avoid root ownership issues
+        import os
+        user_id = os.getuid() if hasattr(os, 'getuid') else 1000
+        group_id = os.getgid() if hasattr(os, 'getgid') else 1000
+        
         # Base template variables
         variables = {
             'USERNAME': context.username,
             'PROJECT_NAME': context.project_name,
             'TEMPLATE_TYPE': context.template_type,
             'HAS_COMMON_PROJECT': context.has_common_project,
+            'USER_ID': user_id,
+            'GROUP_ID': group_id,
             'TOTAL_PORTS': context.port_assignment.total_ports,
             'SEGMENT1_START': context.port_assignment.segment1_start,
             'SEGMENT1_END': context.port_assignment.segment1_end,
