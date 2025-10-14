@@ -258,6 +258,14 @@ class ProjectManager:
         except Exception as e:
             print(f"⚠️  Warning: Failed to generate setup script: {e}")
         
+        # 6. Copy observability configuration files (for common projects)
+        if template_type == 'common':
+            try:
+                observability_files = self._copy_observability_configs(project_path)
+                generated_files.update(observability_files)
+            except Exception as e:
+                print(f"⚠️  Warning: Failed to copy observability configs: {e}")
+        
         return generated_files
     
     def _generate_readme(self, project_name: str, template_type: str, username: str,
@@ -913,6 +921,46 @@ echo "📖 For more information, see README.md"
             "files_to_update": files_to_update,
             "validation_issues": self.validate_copy_operation(source_project, destination_project, port_assignment)
         }
+    
+    def _copy_observability_configs(self, project_path: str) -> Dict[str, str]:
+        """
+        Copy observability configuration files from templates to project
+        
+        Args:
+            project_path: Path to the project directory
+            
+        Returns:
+            Dictionary of copied files
+        """
+        copied_files = {}
+        observability_dir = os.path.join(project_path, "observability")
+        
+        # Ensure observability directory exists
+        os.makedirs(observability_dir, exist_ok=True)
+        
+        # Configuration files to copy from templates/observability/
+        config_files = [
+            "prometheus.yml",
+            "otel-collector-config.yaml"
+        ]
+        
+        for config_file in config_files:
+            # Source: templates/observability/filename
+            source_path = os.path.join(self.templates_dir, "observability", config_file)
+            # Destination: project/observability/filename
+            dest_path = os.path.join(observability_dir, config_file)
+            
+            if os.path.exists(source_path):
+                try:
+                    shutil.copy2(source_path, dest_path)
+                    copied_files[f"observability/{config_file}"] = dest_path
+                    print(f"✓ Copied observability config: {config_file}")
+                except Exception as e:
+                    print(f"⚠️  Warning: Failed to copy {config_file}: {e}")
+            else:
+                print(f"⚠️  Warning: Observability template not found: {source_path}")
+        
+        return copied_files
 
 
 # Convenience functions
