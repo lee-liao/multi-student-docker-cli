@@ -17,12 +17,17 @@
    cd multi-student-docker-cli
    `
 
-2. **Test the installation**:
+2. **Install dependencies**:
+   `ash
+   pip install -r requirements.txt
+   `
+
+3. **Test the installation**:
    `ash
    python cli-tool/cli.py --help
    `
 
-3. **Check your port assignment**:
+4. **Check your port assignment**:
    `ash
    python cli-tool/cli.py show-ports
    `

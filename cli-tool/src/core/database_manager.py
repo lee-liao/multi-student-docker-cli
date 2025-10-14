@@ -265,11 +265,23 @@ class DatabaseManager:
                         if len(warnings) > 3:
                             print(f"  ... and {len(warnings) - 3} more warnings")
                     
-                    # Determine output file path
-                    if db_type == 'postgresql':
-                        output_file = os.path.join(config.output_dir, 'database', 'init.sql')
-                    elif db_type == 'mongodb':
-                        output_file = os.path.join(config.output_dir, 'database', 'init.js')
+                    # Determine output file path using centralized configuration
+                    from src.config.file_paths import get_output_path
+                    
+                    try:
+                        if db_type == 'postgresql':
+                            relative_path = get_output_path(config.template_type, 'postgresql_init')
+                        elif db_type == 'mongodb':
+                            relative_path = get_output_path(config.template_type, 'mongodb_init')
+                        
+                        output_file = os.path.join(config.output_dir, relative_path)
+                    except KeyError as e:
+                        # Fallback to old behavior if path not defined
+                        print(f"⚠️  Using fallback path for {db_type} in {config.template_type}: {e}")
+                        if db_type == 'postgresql':
+                            output_file = os.path.join(config.output_dir, 'database', 'init.sql')
+                        elif db_type == 'mongodb':
+                            output_file = os.path.join(config.output_dir, 'database', 'init.js')
                     
                     # Create directory if it doesn't exist
                     os.makedirs(os.path.dirname(output_file), exist_ok=True)

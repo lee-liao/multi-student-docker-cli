@@ -32,11 +32,14 @@ docker-compose up -d
 
 ## 🛠 Installation
 
-### Method 1: Direct Use
+### Method 1: Direct Use (Recommended)
 `ash
 # Clone this repository
 git clone <repository-url>
 cd multi-student-docker-cli
+
+# Install dependencies
+pip install -r requirements.txt
 
 # Use directly
 python cli-tool/cli.py --help
@@ -44,7 +47,8 @@ python cli-tool/cli.py --help
 
 ### Method 2: System Installation
 `ash
-# Install as package
+# Install dependencies and package
+pip install -r requirements.txt
 pip install -e .
 
 # Use system-wide

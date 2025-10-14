@@ -266,6 +266,16 @@ class ProjectManager:
             except Exception as e:
                 print(f"⚠️  Warning: Failed to copy observability configs: {e}")
         
+        # 7. Validate generated files match docker-compose expectations
+        try:
+            validation_issues = self._validate_project_files(project_path, template_type)
+            if validation_issues:
+                print(f"⚠️  Project validation warnings:")
+                for issue in validation_issues[:3]:
+                    print(f"  - {issue}")
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to validate project files: {e}")
+        
         return generated_files
     
     def _generate_readme(self, project_name: str, template_type: str, username: str,
@@ -933,21 +943,58 @@ echo "📖 For more information, see README.md"
             Dictionary of copied files
         """
         copied_files = {}
-        observability_dir = os.path.join(project_path, "observability")
         
-        # Ensure observability directory exists
+        try:
+            from src.config.file_paths import get_observability_config_paths
+            
+            # Get the correct paths for observability configs
+            config_paths = get_observability_config_paths('common')
+            
+            for config_type, relative_path in config_paths.items():
+                # Create full destination path
+                dest_path = os.path.join(project_path, relative_path)
+                
+                # Ensure destination directory exists
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                
+                # Determine source file name
+                if config_type == 'prometheus':
+                    source_file = "prometheus.yml"
+                elif config_type == 'otel_collector':
+                    source_file = "otel-collector-config.yaml"
+                else:
+                    continue
+                
+                # Source: templates/observability/filename
+                source_path = os.path.join(self.templates_dir, "observability", source_file)
+                
+                if os.path.exists(source_path):
+                    try:
+                        shutil.copy2(source_path, dest_path)
+                        copied_files[relative_path] = dest_path
+                        print(f"✓ Copied observability config: {source_file} → {relative_path}")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Failed to copy {source_file}: {e}")
+                else:
+                    print(f"⚠️  Warning: Observability template not found: {source_path}")
+        
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to use centralized paths, falling back: {e}")
+            # Fallback to original implementation
+            return self._copy_observability_configs_fallback(project_path)
+        
+        return copied_files
+    
+    def _copy_observability_configs_fallback(self, project_path: str) -> Dict[str, str]:
+        """Fallback observability config copying (original implementation)"""
+        copied_files = {}
+        observability_dir = os.path.join(project_path, "observability")
         os.makedirs(observability_dir, exist_ok=True)
         
-        # Configuration files to copy from templates/observability/
-        config_files = [
-            "prometheus.yml",
-            "otel-collector-config.yaml"
-        ]
+        config_files = ["prometheus.yml", "otel-collector-config.yaml"]
         
         for config_file in config_files:
-            # Source: templates/observability/filename
             source_path = os.path.join(self.templates_dir, "observability", config_file)
-            # Destination: project/observability/filename
             dest_path = os.path.join(observability_dir, config_file)
             
             if os.path.exists(source_path):
@@ -957,10 +1004,69 @@ echo "📖 For more information, see README.md"
                     print(f"✓ Copied observability config: {config_file}")
                 except Exception as e:
                     print(f"⚠️  Warning: Failed to copy {config_file}: {e}")
-            else:
-                print(f"⚠️  Warning: Observability template not found: {source_path}")
         
         return copied_files
+    
+    def _validate_project_files(self, project_path: str, template_type: str) -> List[str]:
+        """
+        Validate that generated files match docker-compose expectations
+        
+        Args:
+            project_path: Path to the project directory
+            template_type: Type of template used
+            
+        Returns:
+            List of validation issues
+        """
+        issues = []
+        
+        try:
+            from src.config.file_paths import get_all_output_paths, get_database_file_paths
+            
+            # Get expected files from centralized configuration
+            all_paths = get_all_output_paths(template_type)
+            database_paths = get_database_file_paths(template_type)
+            
+            # Check database files (most critical)
+            for db_path in database_paths:
+                file_path = os.path.join(project_path, db_path)
+                
+                if not os.path.exists(file_path):
+                    issues.append(f"Missing critical database file: {db_path}")
+                elif os.path.isdir(file_path):
+                    issues.append(f"Expected file but found directory: {db_path}")
+            
+            # Check observability files for common template
+            if template_type == 'common':
+                observability_files = ['prometheus_config', 'otel_collector_config']
+                for file_type in observability_files:
+                    if file_type in all_paths:
+                        file_path = os.path.join(project_path, all_paths[file_type])
+                        
+                        if not os.path.exists(file_path):
+                            issues.append(f"Missing observability file: {all_paths[file_type]}")
+                        elif os.path.isdir(file_path):
+                            issues.append(f"Expected file but found directory: {all_paths[file_type]}")
+        
+        except Exception as e:
+            # Fallback to hardcoded validation
+            print(f"⚠️  Using fallback validation: {e}")
+            expected_files = {
+                'common': ['database/postgresql/init.sql', 'database/mongodb/init.js'],
+                'rag': ['database/init.sql'],
+                'agent': ['database/init.sql']
+            }
+            
+            if template_type in expected_files:
+                for expected_file in expected_files[template_type]:
+                    file_path = os.path.join(project_path, expected_file)
+                    
+                    if not os.path.exists(file_path):
+                        issues.append(f"Missing expected file: {expected_file}")
+                    elif os.path.isdir(file_path):
+                        issues.append(f"Expected file but found directory: {expected_file}")
+        
+        return issues
 
 
 # Convenience functions

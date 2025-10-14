@@ -1,19 +1,2 @@
-# Multi-Student Docker Compose CLI Tool - Requirements
-# Core dependencies for the CLI tool
-
-# No external dependencies required for core functionality
-# The tool is designed to work with Python standard library only
-# to minimize installation complexity and security concerns
-
-# Optional dependencies for enhanced functionality:
-# requests>=2.25.0  # For HTTP health checks (if needed)
-# pyyaml>=5.4.0     # For advanced YAML processing (if needed)
-# cryptography>=3.4.0  # For enhanced encryption (if needed)
-
-# Development dependencies (install with: pip install -r requirements-dev.txt)
-# pytest>=6.0.0
-# pytest-cov>=2.10.0
-# black>=21.0.0
-# flake8>=3.8.0
-# mypy>=0.800
-# coverage>=5.0.0
+cryptography>=41.0.0
+pyyaml>=6.0
