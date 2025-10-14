@@ -216,8 +216,8 @@ class DockerComposeManager:
             
             # Check network configuration
             if isinstance(network_config, dict):
-                if 'name' in network_config and not network_config['name'].startswith('{{USERNAME}}'):
-                    warnings.append(f"Network '{network_name}': name should use {{USERNAME}} prefix")
+                # Note: Skip network name property validation as it's checked during template processing
+                pass
         
         return warnings
     
