@@ -5,7 +5,6 @@ services:
   postgres:
     image: pgvector/pgvector:pg15
     container_name: {{USERNAME}}-postgres
-    user: "{{USER_ID}}:{{GROUP_ID}}"
     ports:
       - "{{POSTGRES_PORT}}:5432"
     environment:
@@ -30,15 +29,11 @@ services:
         limits:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
 
   # MongoDB Database
   mongodb:
     image: mongo:6
     container_name: {{USERNAME}}-mongodb
-    user: "{{USER_ID}}:{{GROUP_ID}}"
     ports:
       - "{{MONGODB_PORT}}:27017"
     environment:
@@ -61,9 +56,6 @@ services:
         limits:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
 
   # Redis Cache
   redis:
