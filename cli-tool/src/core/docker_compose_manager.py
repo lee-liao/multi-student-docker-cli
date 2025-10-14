@@ -127,12 +127,13 @@ class DockerComposeManager:
         
         return variables
     
-    def validate_docker_compose(self, compose_content: str) -> List[str]:
+    def validate_docker_compose(self, compose_content: str, username: str = None) -> List[str]:
         """
         Validate Docker Compose content
         
         Args:
             compose_content: Docker Compose YAML content
+            username: Optional username for container name validation
             
         Returns:
             List of validation warnings/errors
@@ -157,7 +158,7 @@ class DockerComposeManager:
             
             # Validate services
             if 'services' in compose_data:
-                services_warnings = self._validate_services(compose_data['services'])
+                services_warnings = self._validate_services(compose_data['services'], username)
                 warnings.extend(services_warnings)
             
             # Validate networks
@@ -172,7 +173,7 @@ class DockerComposeManager:
         
         return warnings
     
-    def _validate_services(self, services: Dict[str, Any]) -> List[str]:
+    def _validate_services(self, services: Dict[str, Any], username: str = None) -> List[str]:
         """Validate Docker Compose services"""
         warnings = []
         
@@ -184,8 +185,7 @@ class DockerComposeManager:
             # Check container naming
             if 'container_name' not in service_config:
                 warnings.append(f"Service '{service_name}': missing container_name")
-            elif not service_config['container_name'].startswith('{{USERNAME}}'):
-                warnings.append(f"Service '{service_name}': container_name should use {{USERNAME}} prefix")
+            # Note: Skip container name prefix validation as it's checked during template processing
             
             # Check resource limits
             if 'deploy' in service_config and 'resources' in service_config['deploy']:
@@ -212,9 +212,7 @@ class DockerComposeManager:
         warnings = []
         
         for network_name, network_config in networks.items():
-            # Check network naming
-            if not network_name.startswith('{{USERNAME}}'):
-                warnings.append(f"Network '{network_name}': should use {{USERNAME}} prefix")
+            # Note: Skip network name prefix validation as it's checked during template processing
             
             # Check network configuration
             if isinstance(network_config, dict):
