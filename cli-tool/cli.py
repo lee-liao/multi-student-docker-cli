@@ -234,19 +234,20 @@ class DockerComposeCLI:
         
         if has_common_project:
             print(f"2. Ensure common infrastructure is running:")
-            print(f"   cd ../common && docker-compose up -d")
+            print(f"   cd ../common && ./setup.sh")
             print(f"")
             print(f"3. Start your {project_name} services:")
+            print(f"   ./setup.sh")
         else:
-            print(f"2. Start all services:")
+            print(f"2. Run the setup script (handles everything automatically):")
+            print(f"   ./setup.sh")
         
-        print(f"   docker-compose up -d")
         print(f"")
-        print(f"4. Check service status:")
-        print(f"   docker-compose ps")
-        print(f"")
-        print(f"5. View logs:")
-        print(f"   docker-compose logs -f")
+        print(f"The setup script will:")
+        print(f"   • Validate ports and Docker")
+        print(f"   • Start all services with proper isolation")
+        print(f"   • Run health checks")
+        print(f"   • Show you service URLs and next steps")
         print(f"")
         print(f"📚 See README.md in the project directory for detailed instructions.")
 
