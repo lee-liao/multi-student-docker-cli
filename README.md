@@ -4,19 +4,25 @@ A simple command-line tool for managing Docker Compose projects in educational e
 
 ## 🚀 Quick Start
 
-# 1. Clone the repository
+# 1. Navigate to user's home directory
+cd ~
+
+# 2. Clone the CLI tool repository
 git clone https://github.com/lee-liao/multi-student-docker-cli.git
+
+# 3. Navigate to the CLI tool directory
 cd multi-student-docker-cli
 
-# 2. Create a new project from the common template
+# 4. Run the CLI command to create a common docker compose project from the common template
 python3 cli-tool/cli.py create-project common --template common
 
-# 3. Navigate to your project directory
+# 5. Navigate to your docker compose project directory
 cd ~/dockeredServices/common
 
-# 4. Run the setup script (automatically builds and starts all services)
+# 6. Run the setup script (automatically builds and starts all services)
 ./setup.sh
 
+# 7. Wait till the containers to be ready. The user credentials of the services can be found in ~/dockeredServices/common/docker-compose.yml.
 
 ## 📋 Requirements
 
