@@ -24,3 +24,10 @@ cd ~/dockeredServices/common
 - Docker 20.10+
 - Docker Compose 2.0+
 
+# Note
+The passwords of services/portal can be found in docker-compose.yml
+
+
+## 🩺 Backup Plan (if you need to stop or reset the environment)
+docker-compose down          # Stop and remove containers
+docker-compose down -v       # Stop, remove containers, and delete volumes
