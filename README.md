@@ -4,25 +4,27 @@ A simple command-line tool for managing Docker Compose projects in educational e
 
 ## 🚀 Quick Start
 
-### 1. Check Your Port Assignment
-`ash
-python cli-tool/cli.py show-ports
-`
+```bash
+# 1. Navigate to user's home directory
+cd ~
 
-### 2. Create Your First Project
-`ash
-# Create a RAG project
-python cli-tool/cli.py create-project my-rag-project --template rag
+# 2. Clone the CLI tool repository
+git clone https://github.com/lee-liao/multi-student-docker-cli.git
 
-# Create an Agent project  
-python cli-tool/cli.py create-project my-agent-project --template agent
-`
+# 3. Navigate to the CLI tool directory
+cd multi-student-docker-cli
 
-### 3. Start Your Project
-`ash
-cd ~/dockeredServices/my-rag-project
-docker-compose up -d
-`
+# 4. Run the CLI command to create a common docker compose project from the common template
+python3 cli-tool/cli.py create-project common --template common
+
+# 5. Navigate to your docker compose project directory
+cd ~/dockeredServices/common
+
+# 6. Run the setup script (automatically builds and starts all services)
+./setup.sh
+
+# 7. Wait till the containers to be ready. The user credentials of the services can be found in ~/dockeredServices/common/docker-compose.yml.
+```
 
 ## 📋 Requirements
 
@@ -33,7 +35,7 @@ docker-compose up -d
 ## 🛠 Installation
 
 ### Method 1: Direct Use (Recommended)
-`ash
+```bash
 # Clone this repository
 git clone <repository-url>
 cd multi-student-docker-cli
@@ -43,21 +45,21 @@ pip install -r requirements.txt
 
 # Use directly
 python cli-tool/cli.py --help
-`
+```
 
 ### Method 2: System Installation
-`ash
+```bash
 # Install dependencies and package
 pip install -r requirements.txt
 pip install -e .
 
 # Use system-wide
 docker-compose-cli --help
-`
+```
 
 ## 🎯 Available Commands
 
-`ash
+```bash
 # Project Management
 python cli-tool/cli.py create-project <name> --template <type>
 python cli-tool/cli.py copy-project <source> <destination>
@@ -74,7 +76,7 @@ python cli-tool/cli.py health-check
 # Maintenance
 python cli-tool/cli.py cleanup
 python cli-tool/cli.py security-check
-`
+```
 
 ## 📚 Available Templates
 
@@ -96,7 +98,7 @@ python cli-tool/cli.py security-check
 ## 🔧 Common Workflows
 
 ### Create and Start a Project
-`ash
+```bash
 # 1. Create project
 python cli-tool/cli.py create-project my-chatbot --template rag
 
@@ -109,43 +111,43 @@ docker-compose up -d
 
 # 4. Check status
 python cli-tool/cli.py project-status my-chatbot
-`
+```
 
 ### Copy Project for Experimentation
-`ash
+```bash
 # Copy existing project
 python cli-tool/cli.py copy-project my-chatbot my-chatbot-v2
 
 # Start the copy
 cd ~/dockeredServices/my-chatbot-v2
 docker-compose up -d
-`
+```
 
 ## 🚨 Troubleshooting
 
 ### Port Conflicts
-`ash
+```bash
 # Check port usage
 python cli-tool/cli.py verify-ports --all
 
 # Optimize ports
 python cli-tool/cli.py optimize-ports
-`
+```
 
 ### Docker Issues
-`ash
+```bash
 # Check Docker status
 docker version
 
 # Health check
 python cli-tool/cli.py health-check
-`
+```
 
 ### Permission Issues
-`ash
+```bash
 # Security check
 python cli-tool/cli.py security-check
-`
+```
 
 ## 📖 Documentation
 
@@ -157,7 +159,7 @@ For detailed documentation, see the [docs/](docs/) directory:
 
 ## 🆘 Getting Help
 
-`ash
+```bash
 # General help
 python cli-tool/cli.py --help
 
@@ -166,7 +168,7 @@ python cli-tool/cli.py create-project --help
 
 # System diagnostics
 python cli-tool/cli.py health-check --comprehensive
-`
+```
 
 ## 📄 License
 

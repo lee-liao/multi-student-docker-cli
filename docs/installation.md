@@ -12,43 +12,43 @@
 ### Method 1: Direct Use (Recommended for Students)
 
 1. **Download the CLI tool**:
-   `ash
+   ```bash
    git clone <repository-url>
    cd multi-student-docker-cli
-   `
+   ```
 
 2. **Install dependencies**:
-   `ash
+   ```bash
    pip install -r requirements.txt
-   `
+   ```
 
 3. **Test the installation**:
-   `ash
+   ```bash
    python cli-tool/cli.py --help
-   `
+   ```
 
 4. **Check your port assignment**:
-   `ash
+   ```bash
    python cli-tool/cli.py show-ports
-   `
+   ```
 
 ### Method 2: System Installation
 
 1. **Install as a Python package**:
-   `ash
+   ```bash
    pip install -e .
-   `
+   ```
 
 2. **Use system-wide**:
-   `ash
+   ```bash
    docker-compose-cli --help
-   `
+   ```
 
 ## Verification
 
 After installation, verify everything works:
 
-`ash
+```bash
 # Check CLI functionality
 python cli-tool/cli.py --help
 
@@ -57,7 +57,7 @@ python cli-tool/cli.py health-check
 
 # Check your port assignment
 python cli-tool/cli.py show-ports
-`
+```
 
 ## Next Steps
 
