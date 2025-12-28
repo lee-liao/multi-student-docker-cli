@@ -53,11 +53,11 @@ handle_error() {
     
     echo ""
     print_status "Agent-specific troubleshooting:"
-    echo "1. Check agent orchestrator: docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs orchestrator"
-    echo "2. Verify worker services: docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs worker"
-    echo "3. Check task queue: docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs redis | grep queue"
+    echo "1. Check agent orchestrator: docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs orchestrator"
+    echo "2. Verify worker services: docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs worker"
+    echo "3. Check task queue: docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs redis | grep queue"
     echo "4. Verify agent API: curl http://localhost:{{BACKEND_PORT}}/api/agents"
-    echo "5. Check agent execution logs: docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs -f --tail=50"
+    echo "5. Check agent execution logs: docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs -f --tail=50"
     echo ""
     exit $exit_code
 }
@@ -75,15 +75,15 @@ if ! docker info >/dev/null 2>&1; then
 fi
 print_success "Docker is running"
 
-# Check docker-compose
-if ! command -v docker-compose >/dev/null 2>&1; then
-    print_error "docker-compose is not installed"
+# Check docker compose
+if ! docker compose version >/dev/null 2>&1; then
+    print_error "docker compose is not available"
     exit 1
 fi
-print_success "docker-compose is available"
+print_success "docker compose is available"
 
 # Validate docker-compose.yml
-if ! docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} config >/dev/null 2>&1; then
+if ! docker compose -p {{USERNAME}}-{{PROJECT_NAME}} config >/dev/null 2>&1; then
     print_error "docker-compose.yml has syntax errors"
     exit 1
 fi
@@ -114,7 +114,7 @@ if docker network ls | grep -q "$NETWORK_NAME"; then
         print_error "Required Agent services are not running in common project"
         echo ""
         print_status "Start common infrastructure:"
-        echo "cd ../common && docker-compose -p {{USERNAME}}-common up -d"
+        echo "cd ../common && docker compose -p {{USERNAME}}-common up -d"
         exit 1
     fi
     
@@ -223,18 +223,18 @@ fi
 print_step "6. Starting Agent services..."
 
 print_status "Pulling Docker images..."
-docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} pull
+docker compose -p {{USERNAME}}-{{PROJECT_NAME}} pull
 
 print_status "Starting Agent infrastructure..."
 {{#unless HAS_COMMON_PROJECT}}
 # Start databases first in self-contained mode
 print_status "Starting databases..."
-docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} up -d postgres mongodb redis
+docker compose -p {{USERNAME}}-{{PROJECT_NAME}} up -d postgres mongodb redis
 sleep 10
 {{/unless}}
 
 print_status "Starting Agent application services..."
-docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} up -d
+docker compose -p {{USERNAME}}-{{PROJECT_NAME}} up -d
 
 # Step 7: Agent-specific health checks
 print_step "7. Performing Agent health checks..."
@@ -249,7 +249,7 @@ for ((i=1; i<=12; i++)); do
         break
     elif [ $i -eq 12 ]; then
         print_error "Agent backend API failed to start"
-        docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs backend
+        docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs backend
     else
         print_status "Waiting for Agent backend... (attempt $i/12)"
         sleep 5
@@ -299,7 +299,7 @@ done
 # Check databases (self-contained mode)
 print_status "Checking PostgreSQL for agent data..."
 for ((i=1; i<=10; i++)); do
-    if docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T postgres pg_isready -U {{USERNAME}}_user >/dev/null 2>&1; then
+    if docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T postgres pg_isready -U {{USERNAME}}_user >/dev/null 2>&1; then
         print_success "PostgreSQL is ready for agent data"
         break
     else
@@ -309,7 +309,7 @@ done
 
 print_status "Checking MongoDB for agent knowledge..."
 for ((i=1; i<=10; i++)); do
-    if docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T mongodb mongosh --eval "db.runCommand({ping: 1})" --quiet >/dev/null 2>&1; then
+    if docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T mongodb mongosh --eval "db.runCommand({ping: 1})" --quiet >/dev/null 2>&1; then
         print_success "MongoDB is ready for agent knowledge base"
         break
     else
@@ -319,7 +319,7 @@ done
 
 print_status "Checking Redis for agent queues..."
 for ((i=1; i<=10; i++)); do
-    if docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T redis redis-cli ping >/dev/null 2>&1; then
+    if docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T redis redis-cli ping >/dev/null 2>&1; then
         print_success "Redis is ready for agent task queues"
         break
     else
@@ -355,9 +355,9 @@ if [ -f "database/agent-init.sql" ] || [ -f "database/init.sql" ]; then
     sleep 5  # Wait for PostgreSQL to be ready
     
     if [ -f "database/agent-init.sql" ]; then
-        docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T postgres psql -U {{USERNAME}}_user -d agent_system -f /docker-entrypoint-initdb.d/agent-init.sql
+        docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T postgres psql -U {{USERNAME}}_user -d agent_system -f /docker-entrypoint-initdb.d/agent-init.sql
     else
-        docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T postgres psql -U {{USERNAME}}_user -d agent_system -f /docker-entrypoint-initdb.d/init.sql
+        docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T postgres psql -U {{USERNAME}}_user -d agent_system -f /docker-entrypoint-initdb.d/init.sql
     fi
     print_success "Agent PostgreSQL database initialized"
 fi
@@ -367,9 +367,9 @@ if [ -f "database/agent-init.js" ] || [ -f "database/mongo-init.js" ]; then
     sleep 3
     
     if [ -f "database/agent-init.js" ]; then
-        docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T mongodb mongosh agent_knowledge < /docker-entrypoint-initdb.d/agent-init.js
+        docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T mongodb mongosh agent_knowledge < /docker-entrypoint-initdb.d/agent-init.js
     else
-        docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T mongodb mongosh agent_knowledge < /docker-entrypoint-initdb.d/mongo-init.js
+        docker compose -p {{USERNAME}}-{{PROJECT_NAME}} exec -T mongodb mongosh agent_knowledge < /docker-entrypoint-initdb.d/mongo-init.js
     fi
     print_success "Agent MongoDB database initialized"
 fi

@@ -40,13 +40,13 @@ if ! docker info >/dev/null 2>&1; then
 fi
 print_success "Docker is running"
 
-# Check if docker-compose is available
-print_status "Checking docker-compose availability..."
-if ! command -v docker-compose >/dev/null 2>&1; then
-    print_error "docker-compose is not installed. Please install docker-compose and try again."
+# Check if docker compose is available
+print_status "Checking docker compose availability..."
+if ! docker compose version >/dev/null 2>&1; then
+    print_error "docker compose is not available. Please install Docker with Compose V2 and try again."
     exit 1
 fi
-print_success "docker-compose is available"
+print_success "docker compose is available"
 
 # Create network if it doesn't exist
 NETWORK_NAME="{{USERNAME}}-network"
@@ -155,13 +155,13 @@ print_success "Created Grafana dashboard provisioning"
 
 # Pull Docker images
 print_status "Pulling Docker images..."
-docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} pull
+docker compose -p {{USERNAME}}-{{PROJECT_NAME}} pull
 
 print_success "All Docker images pulled successfully"
 
 # Start services
 print_status "Starting infrastructure services..."
-docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} up -d
+docker compose -p {{USERNAME}}-{{PROJECT_NAME}} up -d
 
 # Wait for services to be ready
 print_status "Waiting for services to be ready..."
@@ -173,12 +173,12 @@ SERVICES=("postgres" "mongodb" "redis" "chromadb" "jaeger" "prometheus" "grafana
 HEALTHY_COUNT=0
 
 for service in "${SERVICES[@]}"; do
-    if docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} ps "$service" | grep -q "Up"; then
+    if docker compose -p {{USERNAME}}-{{PROJECT_NAME}} ps "$service" | grep -q "Up"; then
         print_success "$service is running"
         ((HEALTHY_COUNT++))
     else
         print_error "$service is not running"
-        docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs "$service" | tail -10
+        docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs "$service" | tail -10
     fi
 done
 
@@ -237,8 +237,8 @@ echo "   python cli.py create-project my-rag --template rag"
 echo "   python cli.py create-project my-agent --template agent"
 echo ""
 echo "4. 📚 Read README.md for detailed service configuration"
-echo "5. 🔧 Monitor services: docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} ps"
-echo "6. 📋 View logs: docker-compose -p {{USERNAME}}-{{PROJECT_NAME}} logs -f"
+echo "5. 🔧 Monitor services: docker compose -p {{USERNAME}}-{{PROJECT_NAME}} ps"
+echo "6. 📋 View logs: docker compose -p {{USERNAME}}-{{PROJECT_NAME}} logs -f"
 echo ""
 
 print_success "Common infrastructure setup complete!"
