@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   {{#if_no_common_project}}
   # Infrastructure services (only if no common project exists)
